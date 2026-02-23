@@ -2,107 +2,11 @@ import streamlit as st
 import pandas as pd
 import datetime
 import json
-import hashlib
-from supabase import create_client, Client
-import io
-from fpdf import FPDF
-import base64
 import time
+from supabase import create_client
 
 # -------------------- Page Config --------------------
 st.set_page_config(page_title="Catering System", layout="wide", initial_sidebar_state="expanded")
-
-# -------------------- Custom CSS for Styling --------------------
-def apply_custom_css(primary_color, logo_url=None):
-    logo_css = f"""
-    .logo {{
-        background-image: url('{logo_url}');
-        background-size: contain;
-        background-repeat: no-repeat;
-        background-position: center;
-        height: 60px;
-        margin: 10px 0;
-    }}
-    """ if logo_url else ""
-    st.markdown(f"""
-    <style>
-        :root {{
-            --primary: {primary_color};
-        }}
-        .stApp {{
-            background-color: #f4f6f9;
-        }}
-        .main .block-container {{
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-        }}
-        .css-1d391kg, .stCard {{
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            padding: 20px;
-            margin-bottom: 20px;
-        }}
-        .stButton>button {{
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            padding: 8px 20px;
-            font-weight: 600;
-            transition: all 0.3s;
-        }}
-        .stButton>button:hover {{
-            background-color: {primary_color}dd;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 10px rgba(0,0,0,0.1);
-        }}
-        .sidebar .sidebar-content {{
-            background-color: #2c3e50;
-            color: white;
-        }}
-        .sidebar .sidebar-content .stRadio > label {{
-            color: white;
-        }}
-        .stMetric {{
-            background-color: white;
-            border-radius: 10px;
-            padding: 15px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }}
-        .stAlert {{
-            border-radius: 5px;
-        }}
-        .stDataFrame {{
-            border-radius: 10px;
-            overflow: hidden;
-        }}
-        .stTable {{
-            border-collapse: separate;
-            border-spacing: 0 5px;
-        }}
-        .pagination {{
-            display: flex;
-            justify-content: center;
-            margin-top: 20px;
-        }}
-        .pagination button {{
-            background-color: white;
-            border: 1px solid #ddd;
-            color: #333;
-            padding: 5px 10px;
-            margin: 0 2px;
-            cursor: pointer;
-            border-radius: 3px;
-        }}
-        .pagination button.active {{
-            background-color: var(--primary);
-            color: white;
-            border-color: var(--primary);
-        }}
-        {logo_css}
-    </style>
-    """, unsafe_allow_html=True)
 
 # -------------------- Initialize Supabase --------------------
 @st.cache_resource
@@ -115,9 +19,11 @@ supabase = init_supabase()
 
 # -------------------- Utility Functions --------------------
 def get_settings():
-    settings = supabase.table("settings").select("*").execute().data
-    settings_dict = {s["key"]: s["value"] for s in settings}
-    return settings_dict
+    try:
+        settings = supabase.table("settings").select("*").execute().data
+        return {s["key"]: s["value"] for s in settings}
+    except:
+        return {}
 
 def get_primary_color():
     return get_settings().get("primary_color", "#3498db")
@@ -125,16 +31,12 @@ def get_primary_color():
 def get_logo_url():
     logo = get_settings().get("logo_url", "")
     if logo:
-        # Generate signed URL valid for 1 hour
         try:
             signed = supabase.storage.from_("logos").create_signed_url(logo, 3600)
             return signed.get("signedURL")
         except:
             return None
     return None
-
-def hash_password(password):
-    return password  # plain for demo
 
 def login_user(email, password):
     try:
@@ -203,6 +105,9 @@ def get_employee_points(emp_id):
     return sum(f["points"] for f in feedback) if feedback else 0
 
 # -------------------- PDF Generation --------------------
+from fpdf import FPDF
+import base64
+
 def generate_pdf_report(title, data, headers, filename):
     pdf = FPDF()
     pdf.add_page()
@@ -252,51 +157,141 @@ def generate_receipt(order_id, emp_name, items, total, payment_status):
 
 def get_pdf_download_link(pdf_bytes, filename):
     b64 = base64.b64encode(pdf_bytes).decode()
-    href = f'<a href="data:application/pdf;base64,{b64}" download="{filename}">📥 Download PDF</a>'
-    return href
+    return f'<a href="data:application/pdf;base64,{b64}" download="{filename}">📥 Download PDF</a>'
 
 def get_csv_download_link(df, filename):
     csv = df.to_csv(index=False)
     b64 = base64.b64encode(csv.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 Download CSV</a>'
-    return href
+    return f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 Download CSV</a>'
 
-# -------------------- Pagination Helper --------------------
-def paginate_dataframe(df, page_size=10, key_prefix=""):
-    if df.empty:
-        return df
-    total_pages = (len(df) + page_size - 1) // page_size
-    page = st.number_input(f"Page ({key_prefix})", min_value=1, max_value=total_pages, value=1, step=1, key=f"page_{key_prefix}")
-    start = (page - 1) * page_size
-    end = start + page_size
-    return df.iloc[start:end]
+# -------------------- Custom CSS for Modern UI --------------------
+def apply_custom_css(primary_color, logo_url=None):
+    st.markdown(f"""
+    <style>
+        :root {{
+            --primary: {primary_color};
+            --primary-light: {primary_color}dd;
+            --sidebar-bg: #1e293b;
+            --card-bg: #ffffff;
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
+        }}
+        * {{
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }}
+        .stApp {{
+            background-color: #f1f5f9;
+        }}
+        .main .block-container {{
+            padding: 2rem 2rem;
+        }}
+        /* Cards */
+        .stMetric, div[data-testid="stExpander"], .stDataFrame, .stForm {{
+            background-color: var(--card-bg);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s;
+        }}
+        .stMetric:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }}
+        /* Buttons */
+        .stButton>button {{
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }}
+        .stButton>button:hover {{
+            background-color: var(--primary-light);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }}
+        /* Sidebar */
+        .css-1d391kg {{
+            background-color: var(--sidebar-bg);
+            color: #f1f5f9;
+        }}
+        .sidebar .stRadio > label {{
+            color: #cbd5e1;
+            font-size: 0.95rem;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            margin: 0.25rem 0;
+            transition: all 0.2s;
+        }}
+        .sidebar .stRadio > label:hover {{
+            background-color: #334155;
+            color: white;
+        }}
+        /* Headers */
+        h1, h2, h3 {{
+            color: var(--text-dark);
+            font-weight: 600;
+        }}
+        /* Inputs */
+        .stTextInput>div>input, .stNumberInput>div>input, .stSelectbox>div>select {{
+            border-radius: 0.5rem;
+            border: 1px solid #e2e8f0;
+            padding: 0.5rem;
+            background-color: white;
+        }}
+        .stTextInput>div>input:focus, .stNumberInput>div>input:focus, .stSelectbox>div>select:focus {{
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px {primary_color}33;
+        }}
+        /* DataFrames */
+        .stDataFrame {{
+            overflow: hidden;
+        }}
+        .stDataFrame thead tr th {{
+            background-color: #f8fafc;
+            font-weight: 600;
+            color: var(--text-dark);
+        }}
+        .stDataFrame tbody tr:nth-child(even) {{
+            background-color: #f8fafc;
+        }}
+        /* Alerts */
+        .stAlert {{
+            border-radius: 0.5rem;
+            border-left-width: 4px;
+        }}
+        /* Expander */
+        .streamlit-expanderHeader {{
+            font-weight: 600;
+            color: var(--text-dark);
+        }}
+    </style>
+    """, unsafe_allow_html=True)
 
-# -------------------- Session Management --------------------
+# -------------------- Session State Init --------------------
 if "user" not in st.session_state:
     st.session_state.user = None
-if "page" not in st.session_state:
-    st.session_state.page = "Login"
+if "ingredients" not in st.session_state:
+    st.session_state.ingredients = [{"item": "", "qty": 0.0, "unit": "g"}]
 
-# Apply custom CSS
-primary_color = get_primary_color()
-logo_url = get_logo_url()
-apply_custom_css(primary_color, logo_url)
-
-# -------------------- Authentication Pages --------------------
+# -------------------- Login Page --------------------
 def login_page():
-    st.title("Catering Management System")
+    st.markdown("<h1 style='text-align: center; margin-bottom: 2rem;'>Catering Management System</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
         with st.form("login_form"):
-            st.markdown('<div class="logo"></div>' if logo_url else "", unsafe_allow_html=True)
-            email = st.text_input("Email")
-            password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("Login")
+            if logo_url := get_logo_url():
+                st.markdown(f'<div style="text-align: center; margin-bottom: 2rem;"><img src="{logo_url}" style="max-height: 80px;"></div>', unsafe_allow_html=True)
+            email = st.text_input("Email", placeholder="super@catering.com")
+            password = st.text_input("Password", type="password", placeholder="••••••")
+            submitted = st.form_submit_button("Login", use_container_width=True)
             if submitted:
                 user = login_user(email, password)
                 if user:
                     st.session_state.user = user
-                    st.session_state.page = "Dashboard"
                     log_audit("Login", f"User {email} logged in")
                     st.rerun()
                 else:
@@ -306,76 +301,57 @@ def login_page():
 def dashboard():
     user = st.session_state.user
     role = user["role"]
+    primary_color = get_primary_color()
+    apply_custom_css(primary_color, get_logo_url())
 
     with st.sidebar:
-        if logo_url:
-            st.markdown(f'<div class="logo"></div>', unsafe_allow_html=True)
-        st.title(f"Welcome {user['email']}")
-        st.write(f"Role: {role}")
+        if logo_url := get_logo_url():
+            st.markdown(f'<div style="text-align: center; margin-bottom: 1rem;"><img src="{logo_url}" style="max-height: 60px;"></div>', unsafe_allow_html=True)
+        st.markdown(f"### Welcome, {user['email']}")
+        st.caption(f"Role: {role}")
 
-        # Navigation based on role
-        menu = []
-        if role in ["SuperUser", "Admin"]:
-            menu.extend(["Dashboard", "Users", "Employees", "Raw Materials", "Recipes", "Purchases", "Monthly Ration", "Reports", "Settings" if role=="SuperUser" else "Audit"])
-        if role == "Receiver":
-            menu = ["Dashboard", "Receive Material"]
-        if role == "Chef":
-            menu = ["Dashboard", "Plan Menu", "Production", "Wastage", "Feedback Insights"]
-        if role == "Cashier":
-            menu = ["Dashboard", "Billing", "Today's Summary"]
-        if role == "Employee":
-            menu = ["Dashboard", "Give Feedback", "My Feedback History", "My Points"]
+        menu_options = {
+            "SuperUser": ["Dashboard", "Users", "Employees", "Raw Materials", "Recipes", "Purchases", "Monthly Ration", "Reports", "Settings", "Audit"],
+            "Admin": ["Dashboard", "Users", "Employees", "Raw Materials", "Recipes", "Purchases", "Monthly Ration", "Reports", "Audit"],
+            "Receiver": ["Dashboard", "Receive Material"],
+            "Chef": ["Dashboard", "Plan Menu", "Production", "Wastage", "Feedback Insights"],
+            "Cashier": ["Dashboard", "Billing", "Today's Summary"],
+            "Employee": ["Dashboard", "Give Feedback", "My Feedback History", "My Points"]
+        }
+        menu = menu_options.get(role, ["Dashboard"])
+        choice = st.radio("", menu, key="nav")
 
-        choice = st.radio("Menu", menu, key="nav")
-
-        if st.button("Logout"):
+        if st.button("Logout", use_container_width=True):
             log_audit("Logout", f"User {user['email']} logged out")
             st.session_state.user = None
-            st.session_state.page = "Login"
             st.rerun()
 
-    if choice == "Dashboard":
-        show_dashboard()
-    elif choice == "Users":
-        users_management()
-    elif choice == "Employees":
-        employees_management()
-    elif choice == "Raw Materials":
-        raw_materials_management()
-    elif choice == "Recipes":
-        recipes_management()
-    elif choice == "Purchases":
-        purchases_management()
-    elif choice == "Monthly Ration":
-        monthly_ration_management()
-    elif choice == "Reports":
-        reports_page()
-    elif choice == "Settings":
-        settings_page()
-    elif choice == "Audit":
-        audit_page()
-    elif choice == "Receive Material":
-        receive_material_page()
-    elif choice == "Plan Menu":
-        plan_menu_page()
-    elif choice == "Production":
-        production_page()
-    elif choice == "Wastage":
-        wastage_page()
-    elif choice == "Feedback Insights":
-        feedback_insights()
-    elif choice == "Billing":
-        billing_page()
-    elif choice == "Today's Summary":
-        today_summary()
-    elif choice == "Give Feedback":
-        employee_feedback()
-    elif choice == "My Feedback History":
-        my_feedback_history()
-    elif choice == "My Points":
-        my_points()
+    # Page routing
+    pages = {
+        "Dashboard": show_dashboard,
+        "Users": users_management,
+        "Employees": employees_management,
+        "Raw Materials": raw_materials_management,
+        "Recipes": recipes_management,
+        "Purchases": purchases_management,
+        "Monthly Ration": monthly_ration_management,
+        "Reports": reports_page,
+        "Settings": settings_page,
+        "Audit": audit_page,
+        "Receive Material": receive_material_page,
+        "Plan Menu": plan_menu_page,
+        "Production": production_page,
+        "Wastage": wastage_page,
+        "Feedback Insights": feedback_insights,
+        "Billing": billing_page,
+        "Today's Summary": today_summary,
+        "Give Feedback": employee_feedback,
+        "My Feedback History": my_feedback_history,
+        "My Points": my_points,
+    }
+    pages[choice]()
 
-# -------------------- Dashboard Stats --------------------
+# -------------------- Dashboard Stats (Cached) --------------------
 @st.cache_data(ttl=60)
 def get_dashboard_stats():
     today = datetime.date.today().isoformat()
@@ -404,18 +380,19 @@ def get_dashboard_stats():
 def show_dashboard():
     st.header("Dashboard")
     stats = get_dashboard_stats()
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Today's Sales", f"Rs {stats['today_sales']}")
-    col2.metric("Meals Served", stats['meals_served'])
-    col3.metric("Active Employees", stats['active_employees'])
-    col4.metric("Low Stock Items", stats['low_stock'])
+    cols = st.columns(4)
+    cols[0].metric("Today's Sales", f"Rs {stats['today_sales']:,.0f}")
+    cols[1].metric("Meals Served", stats['meals_served'])
+    cols[2].metric("Active Employees", stats['active_employees'])
+    cols[3].metric("Low Stock Items", stats['low_stock'])
     st.metric("Average Rating", f"{stats['avg_rating']:.1f} / 5")
 
     if stats['low_stock_details']:
         st.subheader("⚠️ Low Stock Alerts")
         for item in stats['low_stock_details']:
-            reorder = supabase.table("raw_materials").select("reorder_level").eq("name", item["item"]).execute().data[0]["reorder_level"]
-            st.warning(f"{item['item']} only {item['quantity']} {item['unit']} left (Reorder level: {reorder})")
+            reorder = supabase.table("raw_materials").select("reorder_level").eq("name", item["item"]).execute().data
+            level = reorder[0]["reorder_level"] if reorder else 0
+            st.warning(f"{item['item']} only {item['quantity']} {item['unit']} left (Reorder level: {level})")
 
 # -------------------- User Management --------------------
 def users_management():
@@ -427,8 +404,7 @@ def users_management():
                 role = st.selectbox("Role", ["SuperUser","Admin","Receiver","Chef","Cashier","Employee"])
                 password = st.text_input("Password", type="password")
                 status = st.selectbox("Status", ["Active","Inactive"])
-                submitted = st.form_submit_button("Save")
-                if submitted:
+                if st.form_submit_button("Save"):
                     try:
                         supabase.table("users").insert({
                             "email": email,
@@ -444,10 +420,8 @@ def users_management():
 
     users = supabase.table("users").select("*").execute().data
     if users:
-        df = pd.DataFrame(users)
-        df = df[["email","role","status"]]
+        df = pd.DataFrame(users)[["email","role","status"]]
         st.dataframe(df, use_container_width=True)
-        # Export CSV
         st.markdown(get_csv_download_link(df, "users.csv"), unsafe_allow_html=True)
 
 # -------------------- Employees Management --------------------
@@ -461,8 +435,7 @@ def employees_management():
             designation = st.text_input("Designation")
             status = st.selectbox("Status", ["Active","Inactive"])
             dietary = st.selectbox("Dietary Preference", ["Regular","Vegetarian","Jain","Gluten-Free"])
-            submitted = st.form_submit_button("Save")
-            if submitted:
+            if st.form_submit_button("Save"):
                 try:
                     supabase.table("employees").insert({
                         "emp_id": emp_id,
@@ -497,8 +470,7 @@ def raw_materials_management():
             unit = st.selectbox("Unit", ["KG","Liter","Pieces"])
             rate = st.number_input("Current Rate (Rs)", min_value=0.0, step=0.01)
             reorder = st.number_input("Reorder Level", min_value=0.0, step=0.01)
-            submitted = st.form_submit_button("Save")
-            if submitted:
+            if st.form_submit_button("Save"):
                 try:
                     supabase.table("raw_materials").insert({
                         "name": name,
@@ -526,42 +498,61 @@ def raw_materials_management():
         st.dataframe(df, use_container_width=True)
         st.markdown(get_csv_download_link(df, "raw_materials.csv"), unsafe_allow_html=True)
 
-# -------------------- Recipes --------------------
+# -------------------- Recipes (Dynamic Ingredients) --------------------
 def recipes_management():
     st.header("Recipes")
     if st.button("➕ Add Recipe"):
-        with st.form("add_recipe"):
-            dish = st.text_input("Dish Name")
-            price = st.number_input("Selling Price", min_value=0.0)
-            st.write("Ingredients")
-            ingredients = []
-            num = st.number_input("Number of ingredients", min_value=1, step=1, value=1)
-            for i in range(int(num)):
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    item = st.text_input(f"Item {i+1}", key=f"item_{i}")
-                with col2:
-                    qty = st.number_input(f"Qty {i+1}", min_value=0.0, step=0.1, key=f"qty_{i}")
-                with col3:
-                    unit = st.selectbox(f"Unit {i+1}", ["g","ml","pcs"], key=f"unit_{i}")
-                if item and qty:
-                    ingredients.append({"item": item, "qty": qty, "unit": unit})
-            submitted = st.form_submit_button("Save")
-            if submitted:
-                try:
-                    cost = calculate_recipe_cost(ingredients)
-                    supabase.table("recipes").insert({
-                        "dish_name": dish,
-                        "ingredients": json.dumps(ingredients),
-                        "selling_price": price,
-                        "cost_per_plate": cost
-                    }).execute()
-                    st.success("Recipe added")
-                    log_audit("Recipe Added", dish)
-                    st.rerun()
-                except Exception as e:
-                    st.error(str(e))
+        with st.expander("New Recipe", expanded=True):
+            with st.form("add_recipe"):
+                dish = st.text_input("Dish Name")
+                price = st.number_input("Selling Price", min_value=0.0)
+                st.write("Ingredients")
 
+                # Show ingredient rows from session state
+                for i, ing in enumerate(st.session_state.ingredients):
+                    cols = st.columns([4, 2, 2, 1])
+                    with cols[0]:
+                        ing["item"] = st.text_input(f"Item {i+1}", value=ing["item"], key=f"item_{i}")
+                    with cols[1]:
+                        ing["qty"] = st.number_input(f"Qty {i+1}", min_value=0.0, step=0.1, value=ing["qty"], key=f"qty_{i}")
+                    with cols[2]:
+                        ing["unit"] = st.selectbox(f"Unit {i+1}", ["g","ml","pcs"], index=["g","ml","pcs"].index(ing["unit"]), key=f"unit_{i}")
+                    with cols[3]:
+                        if i > 0:
+                            if st.button("❌", key=f"remove_{i}"):
+                                st.session_state.ingredients.pop(i)
+                                st.rerun()
+
+                submitted = st.form_submit_button("Save Recipe")
+                if submitted:
+                    # Filter out empty rows
+                    ingredients = [ing for ing in st.session_state.ingredients if ing["item"].strip() != "" and ing["qty"] > 0]
+                    if not ingredients:
+                        st.error("Add at least one valid ingredient.")
+                    else:
+                        cost = calculate_recipe_cost(ingredients)
+                        supabase.table("recipes").insert({
+                            "dish_name": dish,
+                            "ingredients": json.dumps(ingredients),
+                            "selling_price": price,
+                            "cost_per_plate": cost
+                        }).execute()
+                        st.success("Recipe added")
+                        log_audit("Recipe Added", dish)
+                        st.rerun()
+
+        # Add ingredient button (outside form)
+        col1, col2 = st.columns([1,5])
+        with col1:
+            if st.button("➕ Add Ingredient"):
+                st.session_state.ingredients.append({"item": "", "qty": 0.0, "unit": "g"})
+                st.rerun()
+        with col2:
+            if st.button("🗑️ Clear All"):
+                st.session_state.ingredients = [{"item": "", "qty": 0.0, "unit": "g"}]
+                st.rerun()
+
+    # Display existing recipes
     recipes = supabase.table("recipes").select("*").execute().data
     if recipes:
         df = pd.DataFrame(recipes)
@@ -579,8 +570,7 @@ def purchases_management():
             unit = st.selectbox("Unit", ["KG","Liter","Pieces"])
             rate = st.number_input("Rate (Rs)", min_value=0.0, step=0.01)
             supplier = st.text_input("Supplier")
-            submitted = st.form_submit_button("Save")
-            if submitted:
+            if st.form_submit_button("Save"):
                 try:
                     total = qty * rate
                     supabase.table("purchases").insert({
@@ -619,17 +609,22 @@ def purchases_management():
         st.dataframe(df, use_container_width=True)
         st.markdown(get_csv_download_link(df, "purchases.csv"), unsafe_allow_html=True)
 
-# -------------------- Monthly Ration --------------------
+# -------------------- Monthly Ration (with error handling) --------------------
 def monthly_ration_management():
     st.header("Monthly Ration Setup")
     month = st.text_input("Month (YYYY-MM)", get_current_month())
-    if st.button("➕ Add Ration Entry"):
+    try:
+        data = supabase.table("monthly_ration").select("*").eq("month", month).execute().data
+    except Exception as e:
+        st.error("Monthly ration table not configured. Please run SQL: CREATE TABLE monthly_ration (id UUID DEFAULT uuid_generate_v4() PRIMARY KEY, month TEXT, item TEXT, target_qty DECIMAL, unit TEXT);")
+        return
+
+    if st.button("➕ Add Entry"):
         with st.form("add_ration"):
             item = st.text_input("Item")
             target = st.number_input("Target Quantity", min_value=0.0, step=0.01)
             unit = st.selectbox("Unit", ["KG","Liter","Pieces"])
-            submitted = st.form_submit_button("Save")
-            if submitted:
+            if st.form_submit_button("Save"):
                 try:
                     supabase.table("monthly_ration").insert({
                         "month": month,
@@ -643,10 +638,8 @@ def monthly_ration_management():
                 except Exception as e:
                     st.error(str(e))
 
-    data = supabase.table("monthly_ration").select("*").eq("month", month).execute().data
     if data:
-        df = pd.DataFrame(data)
-        df = df[["item","target_qty","unit"]]
+        df = pd.DataFrame(data)[["item","target_qty","unit"]]
         st.dataframe(df, use_container_width=True)
         st.markdown(get_csv_download_link(df, f"monthly_ration_{month}.csv"), unsafe_allow_html=True)
 
@@ -656,7 +649,6 @@ def receive_material_page():
     with st.form("receive_form"):
         date = st.date_input("Date", datetime.date.today())
         item = st.text_input("Item")
-        # Fetch expected from monthly ration
         month = get_current_month()
         ration = supabase.table("monthly_ration").select("target_qty").eq("month", month).eq("item", item).execute().data
         expected = ration[0]["target_qty"] if ration else 0.0
@@ -664,8 +656,7 @@ def receive_material_page():
         expected_input = st.number_input("Expected Quantity", value=expected, min_value=0.0, step=0.01)
         received = st.number_input("Received Quantity", min_value=0.0, step=0.01)
         batch = st.text_input("Batch No. (optional)")
-        submitted = st.form_submit_button("Save")
-        if submitted:
+        if st.form_submit_button("Save"):
             shortage = received - expected_input
             try:
                 supabase.table("receiving").insert({
@@ -698,10 +689,9 @@ def receive_material_page():
                 st.error(str(e))
 
     history = supabase.table("receiving").select("*").limit(10).execute().data
-    st.subheader("Recent Receivings")
     if history:
-        df = pd.DataFrame(history)
-        st.dataframe(df, use_container_width=True)
+        st.subheader("Recent Receivings")
+        st.dataframe(pd.DataFrame(history), use_container_width=True)
 
 # -------------------- Chef Pages --------------------
 def plan_menu_page():
@@ -731,7 +721,6 @@ def plan_menu_page():
             for item in production_data:
                 recipe = next(r for r in recipes if r['dish_name'] == item['dish'])
                 ingredients = json.loads(recipe['ingredients'])
-                # Deduct stock
                 for ing in ingredients:
                     stock = supabase.table("stock").select("quantity").eq("item", ing['item']).execute()
                     if stock.data:
@@ -739,7 +728,6 @@ def plan_menu_page():
                         qty_needed = ing['qty'] * item['persons'] / 1000 if ing['unit'] in ['g','ml'] else ing['qty'] * item['persons']
                         new_qty = current - qty_needed
                         supabase.table("stock").update({"quantity": new_qty}).eq("item", ing['item']).execute()
-                # Record production
                 supabase.table("production").insert({
                     "date": datetime.date.today().isoformat(),
                     "dish": item['dish'],
@@ -758,8 +746,7 @@ def production_page():
     today = datetime.date.today().isoformat()
     prods = supabase.table("production").select("*").eq("date", today).execute().data
     if prods:
-        df = pd.DataFrame(prods)
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(pd.DataFrame(prods), use_container_width=True)
 
 def wastage_page():
     st.header("Wastage Entry")
@@ -770,8 +757,7 @@ def wastage_page():
         unit = st.selectbox("Unit", ["KG","Liter","Pieces","Plates"])
         reason = st.selectbox("Reason", ["Extra Bacha","Jal Gaya","Kharab","Gira","Other"])
         remarks = st.text_input("Remarks")
-        submitted = st.form_submit_button("Save")
-        if submitted:
+        if st.form_submit_button("Save"):
             supabase.table("wastage").insert({
                 "date": date.isoformat(),
                 "item": item,
@@ -820,8 +806,8 @@ def billing_page():
         st.subheader("Today's Menu")
         selected_items = {}
         for dish in menu:
-            col1, col2 = st.columns([2,1])
-            with col1:
+            cols = st.columns([3,1])
+            with cols[0]:
                 qty = st.number_input(f"Qty for {dish}", min_value=0, step=1, key=dish)
             if qty:
                 selected_items[dish] = qty
@@ -833,16 +819,12 @@ def billing_page():
 
         st.metric("Total", f"Rs {total}")
 
-        payment = st.radio("Payment Status", ["PAID", "UNPAID"])
+        payment = st.radio("Payment Status", ["PAID", "UNPAID"], horizontal=True)
         if st.button("Save Bill"):
-            if not emp_id:
-                st.error("Employee ID required")
-                return
-            if not emp:
-                st.error("Employee not found")
+            if not emp_id or not emp:
+                st.error("Valid Employee ID required")
                 return
             order_id = f"ORD{datetime.datetime.now().strftime('%y%m%d%H%M%S')}"
-            # Save sale
             supabase.table("sales").insert({
                 "date": today,
                 "order_id": order_id,
@@ -879,10 +861,10 @@ def today_summary():
         total = df["total"].sum()
         paid = df[df["payment_status"]=="PAID"]["total"].sum()
         unpaid = df[df["payment_status"]=="UNPAID"]["total"].sum()
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total", f"Rs {total}")
-        col2.metric("Paid", f"Rs {paid}")
-        col3.metric("Unpaid", f"Rs {unpaid}")
+        cols = st.columns(3)
+        cols[0].metric("Total", f"Rs {total}")
+        cols[1].metric("Paid", f"Rs {paid}")
+        cols[2].metric("Unpaid", f"Rs {unpaid}")
         st.dataframe(df[["order_id","emp_id","total","payment_status"]], use_container_width=True)
         st.markdown(get_csv_download_link(df, "today_sales.csv"), unsafe_allow_html=True)
     else:
@@ -904,8 +886,7 @@ def employee_feedback():
                 ate = st.select_slider("How much ate?", options=[0,25,50,75,100], value=100)
                 reason = st.text_input("Reason (if not finished)")
                 comments = st.text_area("Comments")
-                submitted = st.form_submit_button("Submit")
-                if submitted:
+                if st.form_submit_button("Submit"):
                     supabase.table("feedback").insert({
                         "date": datetime.date.today().isoformat(),
                         "emp_id": emp_id,
@@ -927,8 +908,7 @@ def my_feedback_history():
     if emp_id:
         feedback = supabase.table("feedback").select("*").eq("emp_id", emp_id).order("date", desc=True).execute().data
         if feedback:
-            df = pd.DataFrame(feedback)
-            df = df[["date","dish","rating","ate_percent","reason","comments"]]
+            df = pd.DataFrame(feedback)[["date","dish","rating","ate_percent","reason","comments"]]
             st.dataframe(df, use_container_width=True)
         else:
             st.info("No feedback yet")
@@ -939,7 +919,6 @@ def my_points():
     if emp_id:
         points = get_employee_points(emp_id)
         st.metric("Total Points", points)
-        # Option to redeem
         st.info("Redeem options coming soon!")
 
 # -------------------- Reports --------------------
@@ -1012,13 +991,10 @@ def settings_page():
         company = st.text_input("Company Name", settings_dict.get("company_name", ""))
         color = st.color_picker("Primary Color", settings_dict.get("primary_color", "#3498db"))
         date_fmt = st.selectbox("Date Format", ["DD-MM-YYYY", "MM-DD-YYYY", "YYYY-MM-DD"], index=0)
-        # Logo upload
         logo_file = st.file_uploader("Upload Logo (image)", type=["png","jpg","jpeg"])
-        submitted = st.form_submit_button("Save")
-        if submitted:
+        if st.form_submit_button("Save"):
             logo_url = settings_dict.get("logo_url", "")
             if logo_file:
-                # Upload to Supabase storage
                 file_bytes = logo_file.read()
                 file_name = f"logo_{int(time.time())}.png"
                 supabase.storage.from_("logos").upload(file_name, file_bytes, {"content-type": logo_file.type})
@@ -1038,7 +1014,7 @@ def audit_page():
         st.dataframe(df, use_container_width=True)
         st.markdown(get_csv_download_link(df, "audit_log.csv"), unsafe_allow_html=True)
 
-# -------------------- Main App --------------------
+# -------------------- Main --------------------
 def main():
     if st.session_state.user is None:
         login_page()
