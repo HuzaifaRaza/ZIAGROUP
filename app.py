@@ -218,7 +218,7 @@ def get_excel_download_link(df, filename):
     b64 = base64.b64encode(excel_data).decode()
     return f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}">📥 Download Excel</a>'
 
-# -------------------- Custom CSS for Modern UI --------------------
+# -------------------- Custom CSS for Perfect Alignment --------------------
 def apply_custom_css(primary_color, logo_url=None):
     st.markdown(f"""
     <style>
@@ -258,32 +258,64 @@ def apply_custom_css(primary_color, logo_url=None):
             background-color: var(--sidebar-bg);
             background-image: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
             color: #f1f5f9;
+            padding: 1rem 0.5rem;
         }}
         
-        [data-testid="stSidebar"] .stRadio > label {{
+        /* Sidebar buttons */
+        .stButton button {{
+            width: 100%;
+            text-align: left;
+            background-color: transparent;
             color: #cbd5e1;
-            font-size: 0.95rem;
+            border: none;
             padding: 0.75rem 1rem;
             border-radius: 0.5rem;
-            margin: 0.25rem 0;
+            font-weight: 500;
             transition: all 0.2s;
+            margin-bottom: 0.25rem;
             display: flex;
             align-items: center;
         }}
         
-        [data-testid="stSidebar"] .stRadio > label:hover {{
+        .stButton button:hover {{
             background-color: #334155;
             color: white;
         }}
         
-        [data-testid="stSidebar"] .stRadio > label[data-checked="true"] {{
+        .stButton button.active {{
             background-color: var(--primary);
             color: white;
-            font-weight: 500;
+        }}
+        
+        /* Sidebar logo and text */
+        .sidebar-logo {{
+            text-align: center;
+            margin-bottom: 1rem;
+        }}
+        
+        .sidebar-logo img {{
+            max-width: 150px;
+            border-radius: 0.5rem;
+        }}
+        
+        .user-info {{
+            padding: 0 1rem 1rem 1rem;
+            border-bottom: 1px solid #334155;
+            margin-bottom: 1rem;
+        }}
+        
+        .user-info h4 {{
+            color: white;
+            margin-bottom: 0.25rem;
+        }}
+        
+        .user-info p {{
+            color: #94a3b8;
+            font-size: 0.9rem;
         }}
         
         /* Cards */
-        .stMetric, div[data-testid="stExpander"], .stDataFrame, .stForm, .element-container {{
+        .stMetric, div[data-testid="stExpander"], .stDataFrame, .stForm {{
             background-color: var(--card-bg);
             border-radius: 1rem;
             padding: 1.5rem;
@@ -297,8 +329,8 @@ def apply_custom_css(primary_color, logo_url=None):
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }}
         
-        /* Buttons */
-        .stButton>button {{
+        /* Main buttons */
+        .stButton>button:not(.sidebar-button) {{
             background-color: var(--primary);
             color: white;
             border: none;
@@ -309,19 +341,10 @@ def apply_custom_css(primary_color, logo_url=None):
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }}
         
-        .stButton>button:hover {{
+        .stButton>button:hover:not(.sidebar-button) {{
             background-color: var(--primary-dark);
             transform: translateY(-1px);
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
-        }}
-        
-        .stButton>button:active {{
-            transform: translateY(0);
-        }}
-        
-        .stButton>button:disabled {{
-            background-color: #cbd5e1;
-            cursor: not-allowed;
         }}
         
         /* Inputs */
@@ -437,11 +460,6 @@ def apply_custom_css(primary_color, logo_url=None):
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }}
         
-        /* Progress bars */
-        .stProgress > div > div {{
-            background-color: var(--primary);
-        }}
-        
         /* Mobile responsiveness */
         @media (max-width: 768px) {{
             .main .block-container {{
@@ -460,18 +478,14 @@ def apply_custom_css(primary_color, logo_url=None):
                 width: 100%;
             }}
         }}
-        
-        /* Icons in sidebar */
-        .sidebar-icon {{
-            margin-right: 0.75rem;
-            font-size: 1.2rem;
-        }}
     </style>
     """, unsafe_allow_html=True)
 
 # -------------------- Session State --------------------
 if "user" not in st.session_state:
     st.session_state.user = None
+if "page" not in st.session_state:
+    st.session_state.page = "Dashboard"
 if "edit_id" not in st.session_state:
     st.session_state.edit_id = None
 if "edit_table" not in st.session_state:
@@ -495,6 +509,7 @@ def login_page():
                 user = login_user(email, password)
                 if user:
                     st.session_state.user = user
+                    st.session_state.page = "Dashboard"
                     log_audit("Login", f"User {email} logged in")
                     st.rerun()
                 else:
@@ -512,9 +527,8 @@ def dashboard():
 
     with st.sidebar:
         if logo_url := get_logo_url():
-            st.image(logo_url, width=150)
-        st.markdown(f"### Welcome, {user['email']}")
-        st.caption(f"Role: {role}")
+            st.markdown(f'<div class="sidebar-logo"><img src="{logo_url}"></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="user-info"><h4>{user["email"]}</h4><p>Role: {role}</p></div>', unsafe_allow_html=True)
 
         menu_options = {
             "SuperUser": [
@@ -563,19 +577,20 @@ def dashboard():
                 ("🏆 My Points", "My Points"),
             ]
         }
-        
-        menu_items = menu_options.get(role, [("📊 Dashboard", "Dashboard")])
-        menu_labels = [item[0] for item in menu_items]
-        menu_values = [item[1] for item in menu_items]
-        
-        choice_index = st.radio("", menu_labels, index=0, key="nav", label_visibility="collapsed")
-        choice = menu_values[menu_labels.index(choice_index)]
 
-        if st.button("Logout", use_container_width=True):
+        items = menu_options.get(role, [("📊 Dashboard", "Dashboard")])
+        for label, page in items:
+            # Use a unique key for each button
+            if st.button(label, key=f"nav_{page}", use_container_width=True):
+                st.session_state.page = page
+                st.rerun()
+
+        if st.button("🚪 Logout", use_container_width=True):
             log_audit("Logout", f"User {user['email']} logged out")
             st.session_state.user = None
             st.rerun()
 
+    # Render selected page
     pages = {
         "Dashboard": show_dashboard,
         "Users": users_management,
@@ -598,7 +613,7 @@ def dashboard():
         "My Feedback History": my_feedback_history,
         "My Points": my_points,
     }
-    pages[choice]()
+    pages[st.session_state.page]()
 
 # -------------------- Dashboard Stats --------------------
 @st.cache_data(ttl=60)
@@ -639,7 +654,7 @@ def show_dashboard():
             level = reorder[0]["reorder_level"] if reorder else 0
             st.warning(f"{item['item']} only {item['quantity']} {item['unit']} left (Reorder level: {level})")
 
-# -------------------- CRUD Helpers --------------------
+# -------------------- CRUD Helpers (Improved) --------------------
 def render_crud_table(table_name, columns, display_columns, form_fields, fetch_func, insert_func, update_func, delete_func, key_field="id"):
     st.subheader(table_name.replace("_", " ").title())
     if st.button(f"➕ Add {table_name[:-1].title()}"):
@@ -892,7 +907,7 @@ def recipes_management():
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("✏️ Edit", key=f"edit_recipe_{row['id']}"):
-                        st.info("Edit coming soon")  # Placeholder for simplicity
+                        st.info("Edit coming soon")
                 with col2:
                     if st.button("🗑️ Delete", key=f"delete_recipe_{row['id']}"):
                         supabase.table("recipes").delete().eq("id", row['id']).execute()
