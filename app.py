@@ -19,7 +19,7 @@ st.set_page_config(
     menu_items={
         'Get Help': None,
         'Report a bug': None,
-        'About': 'Catering Management System v7.1'
+        'About': 'Catering Management System v7.2'
     }
 )
 
@@ -591,7 +591,7 @@ if "ingredients" not in st.session_state:
 if "last_notification" not in st.session_state:
     st.session_state.last_notification = datetime.datetime.now().isoformat()
 if "edit_mode" not in st.session_state:
-    st.session_state.edit_mode = {}  # dictionary to track which records are being edited
+    st.session_state.edit_mode = {}
 
 # -------------------- Login Page --------------------
 def login_page():
@@ -1057,6 +1057,9 @@ def raw_materials_management():
 # -------------------- Recipes Management (Fixed) --------------------
 def recipes_management():
     st.header("Recipes")
+    raw_materials = get_raw_materials()
+    item_options = [rm["name"] for rm in raw_materials] if raw_materials else []
+    
     if st.button("➕ Add Recipe"):
         st.session_state.add_recipe = True
 
@@ -1081,18 +1084,21 @@ def recipes_management():
             for i, ing in enumerate(st.session_state.ingredients):
                 cols = st.columns([4,2,2,1])
                 with cols[0]:
-                    ing["item"] = st.text_input(f"Item {i+1}", value=ing["item"], key=f"item_{i}")
+                    # Dropdown for item name
+                    default_index = 0
+                    if ing["item"] in item_options:
+                        default_index = item_options.index(ing["item"])
+                    ing["item"] = st.selectbox(f"Item {i+1}", options=item_options, index=default_index, key=f"item_{i}")
                 with cols[1]:
                     ing["qty"] = st.number_input(f"Qty {i+1}", min_value=0.0, step=0.1, value=ing["qty"], key=f"qty_{i}", format="%.2f")
                 with cols[2]:
                     ing["unit"] = st.selectbox(f"Unit {i+1}", ["g","ml","pcs"], index=["g","ml","pcs"].index(ing["unit"]), key=f"unit_{i}")
                 with cols[3]:
-                    # Remove button is inside the form but it's a button – it will cause a form submit if clicked.
-                    # To avoid that, we need to move remove buttons outside as well. Let's move them too.
-                    pass  # we'll handle remove via separate buttons below? Simpler: remove button outside.
+                    # Remove button is handled outside the form
+                    pass
             st.form_submit_button("Save Recipe")  # only submit button inside form
 
-        # After the form, we can show remove buttons for each ingredient
+        # After the form, remove buttons for each ingredient
         if st.session_state.ingredients:
             st.write("Remove ingredients:")
             for i, ing in enumerate(st.session_state.ingredients):
@@ -1123,7 +1129,7 @@ def recipes_management():
                     col1, col2 = st.columns(2)
                     with col1:
                         if st.button("✏️ Edit", key=f"edit_recipe_{row['id']}"):
-                            st.info("Edit coming soon")  # For simplicity, edit not implemented for recipes
+                            st.info("Edit coming soon")
                     with col2:
                         if st.button("🗑️ Delete", key=f"delete_recipe_{row['id']}"):
                             supabase.table("recipes").delete().eq("id", row['id']).execute()
@@ -1133,9 +1139,12 @@ def recipes_management():
             st.markdown(get_csv_download_link(df[["dish_name","selling_price","cost_per_plate"]], "recipes.csv"), unsafe_allow_html=True)
             st.markdown(get_excel_download_link(df[["dish_name","selling_price","cost_per_plate"]], "recipes.xlsx"), unsafe_allow_html=True)
 
-# -------------------- Purchases --------------------
+# -------------------- Purchases Management (with dropdown) --------------------
 def purchases_management():
     st.header("Purchases")
+    raw_materials = get_raw_materials()
+    item_options = [rm["name"] for rm in raw_materials] if raw_materials else []
+    
     def fetch(): return supabase.table("purchases").select("*").order("date", desc=True).execute().data
     def insert(data):
         try:
@@ -1166,7 +1175,6 @@ def purchases_management():
     def update(id, data):
         try:
             supabase.table("purchases").update(data).eq("id", id).execute()
-            # Optionally update stock? Complex, we just update the record.
             st.warning("Purchase updated. Stock was not automatically adjusted; please check manually.")
             log_audit("Update Purchase", str(id))
             st.cache_data.clear()
@@ -1185,7 +1193,7 @@ def purchases_management():
             return False
     form_fields = [
         {"name": "date", "label": "Date", "type": "date"},
-        {"name": "item", "label": "Item", "type": "text"},
+        {"name": "item", "label": "Item", "type": "select", "options": item_options},
         {"name": "quantity", "label": "Quantity", "type": "number"},
         {"name": "unit", "label": "Unit", "type": "select", "options": ["KG","Liter","Pieces"]},
         {"name": "rate", "label": "Rate (Rs)", "type": "number"},
