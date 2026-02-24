@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import json
 import time
+import calendar
 from supabase import create_client
 import plotly.express as px
 import plotly.graph_objects as go
@@ -18,7 +19,7 @@ st.set_page_config(
     menu_items={
         'Get Help': None,
         'Report a bug': None,
-        'About': 'Catering Management System v4.0'
+        'About': 'Catering Management System v5.0'
     }
 )
 
@@ -59,6 +60,10 @@ def get_feedback_range(start_date, end_date):
 @st.cache_data(ttl=60)
 def get_wastage_range(start_date, end_date):
     return supabase.table("wastage").select("*").gte("date", start_date).lte("date", end_date).execute().data
+
+@st.cache_data(ttl=300)
+def get_all_production():
+    return supabase.table("production").select("*").execute().data
 
 # -------------------- Utility Functions --------------------
 def get_settings():
@@ -146,6 +151,11 @@ def get_low_stock_details():
 def get_employee_points(emp_id):
     feedback = supabase.table("feedback").select("points").eq("emp_id", emp_id).execute().data
     return sum(f["points"] for f in feedback) if feedback else 0
+
+def get_available_months():
+    data = supabase.table("monthly_ration").select("month").execute().data
+    months = sorted(set(d['month'] for d in data), reverse=True)
+    return months
 
 # -------------------- Notifications --------------------
 def check_low_stock_notifications():
@@ -580,7 +590,6 @@ def dashboard():
 
         items = menu_options.get(role, [("📊 Dashboard", "Dashboard")])
         for label, page in items:
-            # Use a unique key for each button
             if st.button(label, key=f"nav_{page}", use_container_width=True):
                 st.session_state.page = page
                 st.rerun()
@@ -654,8 +663,8 @@ def show_dashboard():
             level = reorder[0]["reorder_level"] if reorder else 0
             st.warning(f"{item['item']} only {item['quantity']} {item['unit']} left (Reorder level: {level})")
 
-# -------------------- CRUD Helper (Presentable Data) --------------------
-def render_crud_table(table_name, columns, display_columns, form_fields, fetch_func, insert_func, update_func, delete_func, key_field="id"):
+# -------------------- CRUD Helper (with Search) --------------------
+def render_crud_table(table_name, columns, display_columns, form_fields, fetch_func, insert_func, update_func, delete_func, key_field="id", searchable=True):
     st.subheader(table_name.replace("_", " ").title())
     if st.button(f"➕ Add {table_name[:-1].title()}"):
         st.session_state[f"add_{table_name}"] = True
@@ -688,28 +697,35 @@ def render_crud_table(table_name, columns, display_columns, form_fields, fetch_f
         return
 
     df = pd.DataFrame(data)
+
+    # Search box
+    if searchable:
+        search_term = st.text_input(f"🔍 Search {table_name}", key=f"search_{table_name}").lower()
+        if search_term:
+            mask = df.apply(lambda row: row.astype(str).str.lower().str.contains(search_term).any(), axis=1)
+            df = df[mask]
+
     # Pagination
     page_size = 10
     total_pages = (len(df) + page_size - 1) // page_size
-    page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1, key=f"page_{table_name}")
-    start = (page - 1) * page_size
-    end = start + page_size
-    df_page = df.iloc[start:end]
+    if total_pages > 0:
+        page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1, key=f"page_{table_name}")
+        start = (page - 1) * page_size
+        end = start + page_size
+        df_page = df.iloc[start:end]
+    else:
+        df_page = df
 
-    # Display the main table
     st.dataframe(df_page[display_columns], use_container_width=True)
 
-    # Display expanders for each record with clean formatting
     for idx, row in df_page.iterrows():
         with st.expander(f"Details for Record {idx+1} (ID: {row[key_field]})"):
-            # Show fields in a two-column layout
             cols = st.columns(2)
             field_index = 0
             for col_name in display_columns:
                 with cols[field_index % 2]:
                     st.markdown(f"**{col_name}:** {row[col_name]}")
                 field_index += 1
-            # Add Edit/Delete buttons
             col1, col2 = st.columns(2)
             with col1:
                 if st.button(f"✏️ Edit", key=f"edit_{table_name}_{row[key_field]}"):
@@ -907,6 +923,11 @@ def recipes_management():
     recipes = get_recipes()
     if recipes:
         df = pd.DataFrame(recipes)
+        # Search
+        search_term = st.text_input("🔍 Search Recipes").lower()
+        if search_term:
+            df = df[df['dish_name'].str.lower().str.contains(search_term)]
+        st.dataframe(df[["dish_name","selling_price","cost_per_plate"]], use_container_width=True)
         for _, row in df.iterrows():
             with st.expander(f"{row['dish_name']} - Rs {row['selling_price']}"):
                 st.write(f"**Cost per plate:** Rs {row['cost_per_plate']:.2f}")
@@ -916,7 +937,7 @@ def recipes_management():
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("✏️ Edit", key=f"edit_recipe_{row['id']}"):
-                        st.info("Edit coming soon")  # Edit not implemented for simplicity
+                        st.info("Edit coming soon")
                 with col2:
                     if st.button("🗑️ Delete", key=f"delete_recipe_{row['id']}"):
                         supabase.table("recipes").delete().eq("id", row['id']).execute()
@@ -1298,10 +1319,89 @@ def my_points():
         points = get_employee_points(emp_id)
         st.metric("Total Points", points)
 
+# -------------------- Monthly Ration Analysis --------------------
+def monthly_ration_analysis():
+    st.header("Monthly Ration Analysis")
+    months = get_available_months()
+    if not months:
+        st.info("No monthly ration data available")
+        return
+    month = st.selectbox("Select Month", months)
+    if not month:
+        return
+
+    # Get target for the month
+    target_data = supabase.table("monthly_ration").select("*").eq("month", month).execute().data
+    if not target_data:
+        st.warning(f"No target set for {month}")
+        return
+
+    # Get production (consumption) for that month
+    year, month_num = map(int, month.split('-'))
+    last_day = calendar.monthrange(year, month_num)[1]
+    start_date = f"{month}-01"
+    end_date = f"{month}-{last_day}"
+    productions = supabase.table("production").select("*").gte("date", start_date).lte("date", end_date).execute().data
+
+    # Calculate total consumption per item from production
+    consumption = {}
+    for prod in productions:
+        ingredients = json.loads(prod['raw_material_used'])
+        for ing in ingredients:
+            qty = ing['qty'] * prod['persons']
+            if ing['unit'] == 'g':
+                qty = qty / 1000
+            elif ing['unit'] == 'ml':
+                qty = qty / 1000
+            consumption[ing['item']] = consumption.get(ing['item'], 0) + qty
+
+    # Get current stock (end of month – simplified, we take latest from stock)
+    stock_data = supabase.table("stock").select("*").execute().data
+    stock_map = {s['item']: s['quantity'] for s in stock_data}
+
+    # Build report dataframe
+    report = []
+    for target in target_data:
+        item = target['item']
+        target_qty = target['target_qty']
+        consumed = consumption.get(item, 0)
+        remaining = target_qty - consumed
+        current_stock = stock_map.get(item, 0)
+        report.append({
+            "Item": item,
+            "Target (kg/ltr)": target_qty,
+            "Consumed (kg/ltr)": round(consumed, 2),
+            "Remaining from Target": round(remaining, 2),
+            "Current Stock": current_stock,
+            "Stock vs Target": round(current_stock - remaining, 2)
+        })
+
+    df = pd.DataFrame(report)
+    st.dataframe(df, use_container_width=True)
+
+    # Chart
+    fig = px.bar(df, x="Item", y=["Consumed (kg/ltr)", "Remaining from Target"], barmode="group",
+                 title=f"Monthly Ration Consumption - {month}")
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown(get_csv_download_link(df, f"monthly_ration_{month}.csv"), unsafe_allow_html=True)
+    st.markdown(get_excel_download_link(df, f"monthly_ration_{month}.xlsx"), unsafe_allow_html=True)
+
 # -------------------- Advanced Reports --------------------
 def reports_page():
     st.header("Advanced Reports")
-    report_type = st.selectbox("Report Type", ["Sales Overview","Dish Popularity","Employee Consumption","Wastage Trend","Profit Margin Trend","Custom Report"])
+    report_type = st.selectbox("Report Type", [
+        "Sales Overview",
+        "Dish Popularity",
+        "Employee Consumption",
+        "Wastage Trend",
+        "Profit Margin Trend",
+        "Monthly Ration Analysis",
+        "Custom Report"
+    ])
+    if report_type == "Monthly Ration Analysis":
+        monthly_ration_analysis()
+        return
     start = st.date_input("Start Date")
     end = st.date_input("End Date")
     if st.button("Generate Report"):
@@ -1329,7 +1429,6 @@ def reports_page():
             elif report_type == "Dish Popularity":
                 sales = get_sales_range(start.isoformat(), end.isoformat())
                 if sales:
-                    # Extract dish quantities from items JSON
                     dish_counts = {}
                     for sale in sales:
                         items = json.loads(sale["items"])
@@ -1384,7 +1483,6 @@ def reports_page():
                 if sales and purchases:
                     sales_df = pd.DataFrame(sales)
                     purchases_df = pd.DataFrame(purchases)
-                    # Daily profit = daily sales - daily purchase cost (simplified)
                     sales_by_date = sales_df.groupby("date")["total"].sum().reset_index()
                     purchases_by_date = purchases_df.groupby("date")["total"].sum().reset_index()
                     merged = pd.merge(sales_by_date, purchases_by_date, on="date", how="outer").fillna(0)
