@@ -18,7 +18,7 @@ st.set_page_config(
     menu_items={
         'Get Help': None,
         'Report a bug': None,
-        'About': 'Catering Management System v2.0'
+        'About': 'Catering Management System v3.0'
     }
 )
 
@@ -153,12 +153,6 @@ def check_low_stock_notifications():
     for item in low_stock:
         st.toast(f"⚠️ Low stock: {item['item']} only {item['quantity']} left", icon="⚠️")
 
-def check_new_feedback_notification():
-    # In a real app, you'd track last viewed timestamp; here we just show a mock
-    feedback = supabase.table("feedback").select("*").order("date", desc=True).limit(1).execute().data
-    if feedback:
-        st.toast(f"New feedback from {feedback[0]['emp_id']} on {feedback[0]['dish']}", icon="💬")
-
 # -------------------- PDF/Export Functions --------------------
 def generate_pdf_report(title, data, headers, filename):
     pdf = FPDF()
@@ -224,55 +218,85 @@ def get_excel_download_link(df, filename):
     b64 = base64.b64encode(excel_data).decode()
     return f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}">📥 Download Excel</a>'
 
-# -------------------- Custom CSS for Mobile & UI --------------------
+# -------------------- Custom CSS for Modern UI --------------------
 def apply_custom_css(primary_color, logo_url=None):
     st.markdown(f"""
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
         :root {{
             --primary: {primary_color};
-            --primary-light: {primary_color}dd;
+            --primary-light: {primary_color}20;
+            --primary-dark: {primary_color}cc;
             --sidebar-bg: #1e293b;
             --card-bg: #ffffff;
             --text-dark: #0f172a;
             --text-muted: #64748b;
+            --border-light: #e2e8f0;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
         }}
+        
         * {{
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         }}
+        
         .stApp {{
-            background-color: #f1f5f9;
+            background-color: #f8fafc;
         }}
+        
         .main .block-container {{
-            padding: 1rem 1rem;
+            padding: 2rem 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
         }}
-        /* Mobile responsiveness */
-        @media (max-width: 640px) {{
-            .main .block-container {{
-                padding: 0.5rem;
-            }}
-            .stMetric {{
-                padding: 0.75rem;
-            }}
-            .stButton>button {{
-                width: 100%;
-            }}
-            .sidebar .sidebar-content {{
-                width: 100%;
-            }}
+        
+        /* Sidebar */
+        .css-1d391kg, [data-testid="stSidebar"] {{
+            background-color: var(--sidebar-bg);
+            background-image: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+            color: #f1f5f9;
         }}
+        
+        [data-testid="stSidebar"] .stRadio > label {{
+            color: #cbd5e1;
+            font-size: 0.95rem;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            margin: 0.25rem 0;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+        }}
+        
+        [data-testid="stSidebar"] .stRadio > label:hover {{
+            background-color: #334155;
+            color: white;
+        }}
+        
+        [data-testid="stSidebar"] .stRadio > label[data-checked="true"] {{
+            background-color: var(--primary);
+            color: white;
+            font-weight: 500;
+        }}
+        
         /* Cards */
-        .stMetric, div[data-testid="stExpander"], .stDataFrame, .stForm {{
+        .stMetric, div[data-testid="stExpander"], .stDataFrame, .stForm, .element-container {{
             background-color: var(--card-bg);
             border-radius: 1rem;
             padding: 1.5rem;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-            border: 1px solid #e2e8f0;
-            transition: all 0.2s;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: 1px solid var(--border-light);
+            transition: transform 0.2s, box-shadow 0.2s;
         }}
+        
         .stMetric:hover {{
             transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }}
+        
         /* Buttons */
         .stButton>button {{
             background-color: var(--primary);
@@ -282,52 +306,165 @@ def apply_custom_css(primary_color, logo_url=None):
             padding: 0.5rem 1rem;
             font-weight: 500;
             transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }}
+        
         .stButton>button:hover {{
-            background-color: var(--primary-light);
+            background-color: var(--primary-dark);
             transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
         }}
-        /* Sidebar */
-        .sidebar .sidebar-content {{
-            background-color: var(--sidebar-bg);
-            color: #f1f5f9;
+        
+        .stButton>button:active {{
+            transform: translateY(0);
         }}
-        .sidebar .stRadio > label {{
-            color: #cbd5e1;
-            padding: 0.5rem 1rem;
+        
+        .stButton>button:disabled {{
+            background-color: #cbd5e1;
+            cursor: not-allowed;
+        }}
+        
+        /* Inputs */
+        .stTextInput>div>input, .stNumberInput>div>input, .stSelectbox>div>select, .stDateInput>div>input {{
             border-radius: 0.5rem;
-            margin: 0.25rem 0;
-            font-size: 1rem;
+            border: 1px solid var(--border-light);
+            padding: 0.5rem;
+            background-color: white;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }}
-        .sidebar .stRadio > label:hover {{
-            background-color: #334155;
-            color: white;
+        
+        .stTextInput>div>input:focus, .stNumberInput>div>input:focus, .stSelectbox>div>select:focus, .stDateInput>div>input:focus {{
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px {primary_color}40;
+            outline: none;
         }}
+        
+        /* Tables */
+        .stDataFrame {{
+            overflow: hidden;
+        }}
+        
+        .stDataFrame thead tr th {{
+            background-color: #f8fafc;
+            font-weight: 600;
+            color: var(--text-dark);
+            border-bottom: 2px solid var(--primary-light);
+        }}
+        
+        .stDataFrame tbody tr:nth-child(even) {{
+            background-color: #f8fafc;
+        }}
+        
+        .stDataFrame tbody tr:hover {{
+            background-color: {primary_color}10;
+        }}
+        
+        /* Metrics */
+        .stMetric {{
+            text-align: center;
+        }}
+        
+        .stMetric label {{
+            color: var(--text-muted);
+            font-weight: 500;
+        }}
+        
+        .stMetric .css-1wivap2 {{
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-dark);
+        }}
+        
         /* Headers */
         h1, h2, h3 {{
             color: var(--text-dark);
             font-weight: 600;
+            margin-bottom: 1rem;
         }}
-        /* Inputs */
-        .stTextInput>div>input, .stNumberInput>div>input, .stSelectbox>div>select {{
-            border-radius: 0.5rem;
-            border: 1px solid #e2e8f0;
-            padding: 0.5rem;
+        
+        h1 {{
+            font-size: 2rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 0.5rem;
         }}
-        .stTextInput>div>input:focus {{
-            border-color: var(--primary);
+        
+        h2 {{
+            font-size: 1.5rem;
         }}
-        /* DataFrames */
-        .stDataFrame thead tr th {{
-            background-color: #f8fafc;
+        
+        h3 {{
+            font-size: 1.25rem;
+        }}
+        
+        /* Expanders */
+        .streamlit-expanderHeader {{
             font-weight: 600;
-        }}
-        .stDataFrame tbody tr:nth-child(even) {{
+            color: var(--text-dark);
             background-color: #f8fafc;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
         }}
+        
+        /* Alerts */
+        .stAlert {{
+            border-radius: 0.5rem;
+            border-left-width: 4px;
+        }}
+        
+        .stAlert.success {{
+            background-color: #d1fae5;
+            border-left-color: var(--success);
+        }}
+        
+        .stAlert.error {{
+            background-color: #fee2e2;
+            border-left-color: var(--danger);
+        }}
+        
+        .stAlert.warning {{
+            background-color: #fef3c7;
+            border-left-color: var(--warning);
+        }}
+        
+        .stAlert.info {{
+            background-color: #dbeafe;
+            border-left-color: var(--info);
+        }}
+        
         /* Toast */
         .stToast {{
             border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }}
+        
+        /* Progress bars */
+        .stProgress > div > div {{
+            background-color: var(--primary);
+        }}
+        
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {{
+            .main .block-container {{
+                padding: 1rem;
+            }}
+            
+            .stMetric {{
+                padding: 1rem;
+            }}
+            
+            .stButton>button {{
+                width: 100%;
+            }}
+            
+            [data-testid="stSidebar"] {{
+                width: 100%;
+            }}
+        }}
+        
+        /* Icons in sidebar */
+        .sidebar-icon {{
+            margin-right: 0.75rem;
+            font-size: 1.2rem;
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -372,7 +509,6 @@ def dashboard():
 
     # Notifications
     check_low_stock_notifications()
-    # check_new_feedback_notification()  # Uncomment to enable
 
     with st.sidebar:
         if logo_url := get_logo_url():
@@ -381,15 +517,59 @@ def dashboard():
         st.caption(f"Role: {role}")
 
         menu_options = {
-            "SuperUser": ["Dashboard","Users","Employees","Raw Materials","Recipes","Purchases","Monthly Ration","Reports","Settings","Audit"],
-            "Admin": ["Dashboard","Users","Employees","Raw Materials","Recipes","Purchases","Monthly Ration","Reports","Audit"],
-            "Receiver": ["Dashboard","Receive Material"],
-            "Chef": ["Dashboard","Plan Menu","Production","Wastage","Feedback Insights"],
-            "Cashier": ["Dashboard","Billing","Today's Summary"],
-            "Employee": ["Dashboard","Give Feedback","My Feedback History","My Points"]
+            "SuperUser": [
+                ("📊 Dashboard", "Dashboard"),
+                ("👥 Users", "Users"),
+                ("👤 Employees", "Employees"),
+                ("📦 Raw Materials", "Raw Materials"),
+                ("🍽️ Recipes", "Recipes"),
+                ("💰 Purchases", "Purchases"),
+                ("📅 Monthly Ration", "Monthly Ration"),
+                ("📈 Reports", "Reports"),
+                ("⚙️ Settings", "Settings"),
+                ("📋 Audit", "Audit"),
+            ],
+            "Admin": [
+                ("📊 Dashboard", "Dashboard"),
+                ("👥 Users", "Users"),
+                ("👤 Employees", "Employees"),
+                ("📦 Raw Materials", "Raw Materials"),
+                ("🍽️ Recipes", "Recipes"),
+                ("💰 Purchases", "Purchases"),
+                ("📅 Monthly Ration", "Monthly Ration"),
+                ("📈 Reports", "Reports"),
+                ("📋 Audit", "Audit"),
+            ],
+            "Receiver": [
+                ("📊 Dashboard", "Dashboard"),
+                ("📥 Receive Material", "Receive Material"),
+            ],
+            "Chef": [
+                ("📊 Dashboard", "Dashboard"),
+                ("📝 Plan Menu", "Plan Menu"),
+                ("🍳 Production", "Production"),
+                ("🗑️ Wastage", "Wastage"),
+                ("💬 Feedback Insights", "Feedback Insights"),
+            ],
+            "Cashier": [
+                ("📊 Dashboard", "Dashboard"),
+                ("🧾 Billing", "Billing"),
+                ("📋 Today's Summary", "Today's Summary"),
+            ],
+            "Employee": [
+                ("📊 Dashboard", "Dashboard"),
+                ("⭐ Give Feedback", "Give Feedback"),
+                ("📜 My Feedback History", "My Feedback History"),
+                ("🏆 My Points", "My Points"),
+            ]
         }
-        menu = menu_options.get(role, ["Dashboard"])
-        choice = st.radio("", menu)
+        
+        menu_items = menu_options.get(role, [("📊 Dashboard", "Dashboard")])
+        menu_labels = [item[0] for item in menu_items]
+        menu_values = [item[1] for item in menu_items]
+        
+        choice_index = st.radio("", menu_labels, index=0, key="nav", label_visibility="collapsed")
+        choice = menu_values[menu_labels.index(choice_index)]
 
         if st.button("Logout", use_container_width=True):
             log_audit("Logout", f"User {user['email']} logged out")
@@ -459,7 +639,7 @@ def show_dashboard():
             level = reorder[0]["reorder_level"] if reorder else 0
             st.warning(f"{item['item']} only {item['quantity']} {item['unit']} left (Reorder level: {level})")
 
-# -------------------- CRUD Helpers (Improved) --------------------
+# -------------------- CRUD Helpers --------------------
 def render_crud_table(table_name, columns, display_columns, form_fields, fetch_func, insert_func, update_func, delete_func, key_field="id"):
     st.subheader(table_name.replace("_", " ").title())
     if st.button(f"➕ Add {table_name[:-1].title()}"):
@@ -712,7 +892,7 @@ def recipes_management():
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("✏️ Edit", key=f"edit_recipe_{row['id']}"):
-                        st.info("Edit coming soon")  # Placeholder
+                        st.info("Edit coming soon")  # Placeholder for simplicity
                 with col2:
                     if st.button("🗑️ Delete", key=f"delete_recipe_{row['id']}"):
                         supabase.table("recipes").delete().eq("id", row['id']).execute()
