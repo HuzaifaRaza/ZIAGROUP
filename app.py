@@ -19,7 +19,7 @@ st.set_page_config(
     menu_items={
         'Get Help': None,
         'Report a bug': None,
-        'About': 'Catering Management System v5.0'
+        'About': 'Catering Management System v6.0'
     }
 )
 
@@ -504,6 +504,8 @@ if "ingredients" not in st.session_state:
     st.session_state.ingredients = [{"item": "", "qty": 0.0, "unit": "g"}]
 if "last_notification" not in st.session_state:
     st.session_state.last_notification = datetime.datetime.now().isoformat()
+if "edit_mode" not in st.session_state:
+    st.session_state.edit_mode = {}  # dictionary to track which records are being edited
 
 # -------------------- Login Page --------------------
 def login_page():
@@ -663,12 +665,15 @@ def show_dashboard():
             level = reorder[0]["reorder_level"] if reorder else 0
             st.warning(f"{item['item']} only {item['quantity']} {item['unit']} left (Reorder level: {level})")
 
-# -------------------- CRUD Helper (with Search) --------------------
+# -------------------- Improved CRUD Helper (with full Edit) --------------------
 def render_crud_table(table_name, columns, display_columns, form_fields, fetch_func, insert_func, update_func, delete_func, key_field="id", searchable=True):
     st.subheader(table_name.replace("_", " ").title())
+    
+    # Add button
     if st.button(f"➕ Add {table_name[:-1].title()}"):
         st.session_state[f"add_{table_name}"] = True
 
+    # Add form
     if st.session_state.get(f"add_{table_name}", False):
         with st.form(f"form_add_{table_name}", clear_on_submit=True):
             row_data = {}
@@ -691,6 +696,7 @@ def render_crud_table(table_name, columns, display_columns, form_fields, fetch_f
                     else:
                         st.error("Failed to add")
 
+    # Fetch data
     data = fetch_func()
     if not data:
         st.info("No records found")
@@ -716,31 +722,74 @@ def render_crud_table(table_name, columns, display_columns, form_fields, fetch_f
     else:
         df_page = df
 
+    # Main table
     st.dataframe(df_page[display_columns], use_container_width=True)
 
+    # Expandable details for each record with inline edit
     for idx, row in df_page.iterrows():
-        with st.expander(f"Details for Record {idx+1} (ID: {row[key_field]})"):
-            cols = st.columns(2)
-            field_index = 0
-            for col_name in display_columns:
-                with cols[field_index % 2]:
-                    st.markdown(f"**{col_name}:** {row[col_name]}")
-                field_index += 1
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button(f"✏️ Edit", key=f"edit_{table_name}_{row[key_field]}"):
-                    st.session_state.edit_table = table_name
-                    st.session_state.edit_id = row[key_field]
-                    st.session_state.edit_data = row.to_dict()
-            with col2:
-                if st.button(f"🗑️ Delete", key=f"delete_{table_name}_{row[key_field]}"):
-                    if delete_func(row[key_field]):
-                        st.success("Deleted")
-                        st.cache_data.clear()
+        record_id = row[key_field]
+        expander_key = f"expander_{table_name}_{record_id}"
+        with st.expander(f"Record {idx+1} (ID: {record_id})"):
+            # Check if this record is in edit mode
+            edit_key = f"edit_mode_{table_name}_{record_id}"
+            if st.session_state.edit_mode.get(edit_key, False):
+                # Edit form
+                with st.form(key=f"edit_form_{table_name}_{record_id}"):
+                    updated_data = {}
+                    for field in form_fields:
+                        current_value = row.get(field["name"], "")
+                        if field["type"] == "text":
+                            updated_data[field["name"]] = st.text_input(field["label"], value=current_value)
+                        elif field["type"] == "number":
+                            updated_data[field["name"]] = st.number_input(field["label"], value=float(current_value), step=0.01, format="%.2f")
+                        elif field["type"] == "select":
+                            # current_value might not be in options? we'll set index based on value
+                            options = field["options"]
+                            default_index = options.index(current_value) if current_value in options else 0
+                            updated_data[field["name"]] = st.selectbox(field["label"], options, index=default_index)
+                        elif field["type"] == "date":
+                            # assuming date is string like YYYY-MM-DD
+                            date_val = datetime.datetime.strptime(current_value, "%Y-%m-%d").date() if current_value else datetime.date.today()
+                            updated_data[field["name"]] = st.date_input(field["label"], date_val).isoformat()
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.form_submit_button("💾 Save"):
+                            if update_func(record_id, updated_data):
+                                st.success("Updated")
+                                st.session_state.edit_mode[edit_key] = False
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error("Update failed")
+                    with col2:
+                        if st.form_submit_button("❌ Cancel"):
+                            st.session_state.edit_mode[edit_key] = False
+                            st.rerun()
+            else:
+                # Display record details in a clean format
+                cols = st.columns(2)
+                field_index = 0
+                for col_name in display_columns:
+                    with cols[field_index % 2]:
+                        st.markdown(f"**{col_name}:** {row[col_name]}")
+                    field_index += 1
+                # Show all fields optionally
+                # Buttons
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(f"✏️ Edit", key=f"edit_{table_name}_{record_id}"):
+                        st.session_state.edit_mode[edit_key] = True
                         st.rerun()
-                    else:
-                        st.error("Delete failed")
+                with col2:
+                    if st.button(f"🗑️ Delete", key=f"delete_{table_name}_{record_id}"):
+                        if delete_func(record_id):
+                            st.success("Deleted")
+                            st.cache_data.clear()
+                            st.rerun()
+                        else:
+                            st.error("Delete failed")
 
+    # Export links
     st.markdown(get_csv_download_link(df[display_columns], f"{table_name}.csv"), unsafe_allow_html=True)
     st.markdown(get_excel_download_link(df[display_columns], f"{table_name}.xlsx"), unsafe_allow_html=True)
 
@@ -937,7 +986,7 @@ def recipes_management():
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("✏️ Edit", key=f"edit_recipe_{row['id']}"):
-                        st.info("Edit coming soon")
+                        st.info("Edit coming soon")  # For simplicity, edit not implemented for recipes
                 with col2:
                     if st.button("🗑️ Delete", key=f"delete_recipe_{row['id']}"):
                         supabase.table("recipes").delete().eq("id", row['id']).execute()
@@ -978,8 +1027,19 @@ def purchases_management():
             st.error(str(e))
             return False
     def update(id, data):
-        st.warning("Edit not supported; delete and re-add")
-        return False
+        try:
+            # For simplicity, we allow update of purchase records (but note: stock implications)
+            # First, get old record to revert stock changes? Complex. We'll just update.
+            # In a real system, you might want to restrict editing purchases.
+            supabase.table("purchases").update(data).eq("id", id).execute()
+            # Also update stock? This is tricky. We'll just update the record and warn.
+            st.warning("Purchase updated. Stock was not automatically adjusted; please check manually.")
+            log_audit("Update Purchase", str(id))
+            st.cache_data.clear()
+            return True
+        except Exception as e:
+            st.error(str(e))
+            return False
     def delete(id):
         try:
             supabase.table("purchases").delete().eq("id", id).execute()
@@ -1330,20 +1390,17 @@ def monthly_ration_analysis():
     if not month:
         return
 
-    # Get target for the month
     target_data = supabase.table("monthly_ration").select("*").eq("month", month).execute().data
     if not target_data:
         st.warning(f"No target set for {month}")
         return
 
-    # Get production (consumption) for that month
     year, month_num = map(int, month.split('-'))
     last_day = calendar.monthrange(year, month_num)[1]
     start_date = f"{month}-01"
     end_date = f"{month}-{last_day}"
     productions = supabase.table("production").select("*").gte("date", start_date).lte("date", end_date).execute().data
 
-    # Calculate total consumption per item from production
     consumption = {}
     for prod in productions:
         ingredients = json.loads(prod['raw_material_used'])
@@ -1355,11 +1412,9 @@ def monthly_ration_analysis():
                 qty = qty / 1000
             consumption[ing['item']] = consumption.get(ing['item'], 0) + qty
 
-    # Get current stock (end of month – simplified, we take latest from stock)
     stock_data = supabase.table("stock").select("*").execute().data
     stock_map = {s['item']: s['quantity'] for s in stock_data}
 
-    # Build report dataframe
     report = []
     for target in target_data:
         item = target['item']
@@ -1379,7 +1434,6 @@ def monthly_ration_analysis():
     df = pd.DataFrame(report)
     st.dataframe(df, use_container_width=True)
 
-    # Chart
     fig = px.bar(df, x="Item", y=["Consumed (kg/ltr)", "Remaining from Target"], barmode="group",
                  title=f"Monthly Ration Consumption - {month}")
     st.plotly_chart(fig, use_container_width=True)
@@ -1412,11 +1466,9 @@ def reports_page():
                     df = pd.DataFrame(sales)
                     st.subheader("Sales Data")
                     st.dataframe(df[["date","order_id","emp_id","total","payment_status"]], use_container_width=True)
-                    # Sales trend
                     sales_by_date = df.groupby("date")["total"].sum().reset_index()
                     fig = px.line(sales_by_date, x="date", y="total", title="Sales Trend")
                     st.plotly_chart(fig, use_container_width=True)
-                    # Payment status pie
                     payment_counts = df["payment_status"].value_counts().reset_index()
                     payment_counts.columns = ["Status","Count"]
                     fig2 = px.pie(payment_counts, values="Count", names="Status", title="Payment Status")
