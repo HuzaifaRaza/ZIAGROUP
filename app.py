@@ -19,7 +19,7 @@ st.set_page_config(
     menu_items={
         'Get Help': None,
         'Report a bug': None,
-        'About': 'Catering Management System v7.2'
+        'About': 'Catering Management System v8.0'
     }
 )
 
@@ -804,7 +804,7 @@ def show_dashboard():
     else:
         st.info("No feedback in last 7 days")
 
-# -------------------- Improved CRUD Helper (with friendly expander title) --------------------
+# -------------------- CRUD Helper (with friendly expander title) --------------------
 def render_crud_table(table_name, columns, display_columns, form_fields, fetch_func, insert_func, update_func, delete_func, key_field="id", searchable=True, title_field=None):
     st.subheader(table_name.replace("_", " ").title())
     
@@ -1059,85 +1059,136 @@ def recipes_management():
     st.header("Recipes")
     raw_materials = get_raw_materials()
     item_options = [rm["name"] for rm in raw_materials] if raw_materials else []
-    
-    if st.button("➕ Add Recipe"):
-        st.session_state.add_recipe = True
 
-    if st.session_state.get("add_recipe", False):
-        # Buttons to add/clear ingredients – placed outside the form
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("➕ Add Ingredient", key="add_ingredient_outside"):
-                st.session_state.ingredients.append({"item": "", "qty": 0.0, "unit": "g"})
-                st.rerun()
-        with col2:
-            if st.button("🗑️ Clear All", key="clear_ingredients_outside"):
-                st.session_state.ingredients = [{"item": "", "qty": 0.0, "unit": "g"}]
-                st.rerun()
+    # Initialize session state for ingredients if not present
+    if "ingredients" not in st.session_state:
+        st.session_state.ingredients = [{"item": "", "qty": 0.0, "unit": "g"}]
 
-        # Main form for recipe details and ingredient rows
-        with st.form("add_recipe_form", clear_on_submit=True):
-            dish_name = st.text_input("Dish Name")
-            selling_price = st.number_input("Selling Price", min_value=0.0, step=0.01, format="%.2f")
-            st.write("Ingredients")
-            # Ingredient rows
-            for i, ing in enumerate(st.session_state.ingredients):
-                cols = st.columns([4,2,2,1])
-                with cols[0]:
-                    # Dropdown for item name
-                    default_index = 0
-                    if ing["item"] in item_options:
-                        default_index = item_options.index(ing["item"])
-                    ing["item"] = st.selectbox(f"Item {i+1}", options=item_options, index=default_index, key=f"item_{i}")
-                with cols[1]:
-                    ing["qty"] = st.number_input(f"Qty {i+1}", min_value=0.0, step=0.1, value=ing["qty"], key=f"qty_{i}", format="%.2f")
-                with cols[2]:
-                    ing["unit"] = st.selectbox(f"Unit {i+1}", ["g","ml","pcs"], index=["g","ml","pcs"].index(ing["unit"]), key=f"unit_{i}")
-                with cols[3]:
-                    # Remove button is handled outside the form
-                    pass
-            st.form_submit_button("Save Recipe")  # only submit button inside form
-
-        # After the form, remove buttons for each ingredient
-        if st.session_state.ingredients:
-            st.write("Remove ingredients:")
-            for i, ing in enumerate(st.session_state.ingredients):
-                if i > 0:  # keep at least one
-                    if st.button(f"❌ Remove {ing['item'] or f'Ingredient {i+1}'}", key=f"remove_{i}"):
-                        st.session_state.ingredients.pop(i)
-                        st.rerun()
-        else:
-            # if all removed, reset to one empty row
+    # Buttons to add/clear ingredients
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("➕ Add Ingredient"):
+            st.session_state.ingredients.append({"item": "", "qty": 0.0, "unit": "g"})
+            st.rerun()
+    with col2:
+        if st.button("🗑️ Clear All"):
             st.session_state.ingredients = [{"item": "", "qty": 0.0, "unit": "g"}]
             st.rerun()
-    else:
-        # Display existing recipes
-        recipes = get_recipes()
-        if recipes:
-            df = pd.DataFrame(recipes)
-            # Search
-            search_term = st.text_input("🔍 Search Recipes").lower()
-            if search_term:
-                df = df[df['dish_name'].str.lower().str.contains(search_term)]
-            st.dataframe(df[["dish_name","selling_price","cost_per_plate"]], use_container_width=True)
-            for _, row in df.iterrows():
-                with st.expander(f"{row['dish_name']} - Rs {row['selling_price']}"):
-                    st.write(f"**Cost per plate:** Rs {row['cost_per_plate']:.2f}")
-                    st.write("**Ingredients:**")
-                    for ing in json.loads(row['ingredients']):
-                        st.write(f"- {ing['item']}: {ing['qty']}{ing['unit']}")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button("✏️ Edit", key=f"edit_recipe_{row['id']}"):
-                            st.info("Edit coming soon")
-                    with col2:
-                        if st.button("🗑️ Delete", key=f"delete_recipe_{row['id']}"):
-                            supabase.table("recipes").delete().eq("id", row['id']).execute()
-                            st.success("Deleted")
-                            st.cache_data.clear()
-                            st.rerun()
-            st.markdown(get_csv_download_link(df[["dish_name","selling_price","cost_per_plate"]], "recipes.csv"), unsafe_allow_html=True)
-            st.markdown(get_excel_download_link(df[["dish_name","selling_price","cost_per_plate"]], "recipes.xlsx"), unsafe_allow_html=True)
+
+    # Display ingredient rows
+    st.write("---")
+    total_cost = 0.0
+    for i, ing in enumerate(st.session_state.ingredients):
+        cols = st.columns([4, 2, 2, 1])
+        with cols[0]:
+            # Dropdown for item
+            default_index = 0
+            if ing["item"] in item_options:
+                default_index = item_options.index(ing["item"])
+            selected_item = st.selectbox(
+                f"Item {i+1}",
+                options=item_options,
+                index=default_index,
+                key=f"item_{i}"
+            )
+            st.session_state.ingredients[i]["item"] = selected_item
+        with cols[1]:
+            qty = st.number_input(
+                f"Qty {i+1}",
+                min_value=0.0,
+                step=0.1,
+                value=ing["qty"],
+                key=f"qty_{i}",
+                format="%.2f"
+            )
+            st.session_state.ingredients[i]["qty"] = qty
+        with cols[2]:
+            unit = st.selectbox(
+                f"Unit {i+1}",
+                ["g", "ml", "pcs"],
+                index=["g", "ml", "pcs"].index(ing["unit"]),
+                key=f"unit_{i}"
+            )
+            st.session_state.ingredients[i]["unit"] = unit
+        with cols[3]:
+            if i > 0 and st.button("❌", key=f"remove_{i}"):
+                st.session_state.ingredients.pop(i)
+                st.rerun()
+
+        # Calculate ingredient cost contribution (real‑time)
+        if selected_item and qty > 0:
+            # Find current rate of the selected raw material
+            rate_data = supabase.table("raw_materials").select("current_rate").eq("name", selected_item).execute().data
+            if rate_data:
+                rate = rate_data[0]["current_rate"]
+                qty_kg = qty / 1000 if unit in ["g", "ml"] else qty
+                cost_contrib = rate * qty_kg
+                total_cost += cost_contrib
+                st.caption(f"Cost: Rs {cost_contrib:.2f}")
+    st.write("---")
+
+    # Recipe name and selling price
+    dish_name = st.text_input("Dish Name")
+    # Show total cost
+    st.metric("Total Cost per Plate", f"Rs {total_cost:.2f}")
+    selling_price = st.number_input("Selling Price", min_value=0.0, step=0.01, format="%.2f")
+
+    if st.button("💾 Save Recipe"):
+        # Prepare ingredients list (only those with item and qty > 0)
+        valid_ingredients = [ing for ing in st.session_state.ingredients if ing["item"] and ing["qty"] > 0]
+        if not valid_ingredients:
+            st.error("At least one valid ingredient required.")
+        elif not dish_name:
+            st.error("Dish name required.")
+        elif selling_price <= 0:
+            st.error("Selling price must be greater than zero.")
+        else:
+            # Calculate final cost (using the same logic, but we already have total_cost)
+            # Insert into database
+            try:
+                data = {
+                    "dish_name": dish_name,
+                    "ingredients": json.dumps(valid_ingredients),
+                    "selling_price": selling_price,
+                    "cost_per_plate": total_cost
+                }
+                supabase.table("recipes").insert(data).execute()
+                st.success("Recipe saved!")
+                # Clear the form
+                st.session_state.ingredients = [{"item": "", "qty": 0.0, "unit": "g"}]
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error saving recipe: {e}")
+
+    st.write("---")
+    st.subheader("Existing Recipes")
+    recipes = get_recipes()
+    if recipes:
+        df = pd.DataFrame(recipes)
+        search = st.text_input("🔍 Search Recipes").lower()
+        if search:
+            df = df[df['dish_name'].str.lower().str.contains(search)]
+        st.dataframe(df[["dish_name", "selling_price", "cost_per_plate"]], use_container_width=True)
+        for _, row in df.iterrows():
+            with st.expander(f"{row['dish_name']} - Rs {row['selling_price']}"):
+                st.write(f"**Cost per plate:** Rs {row['cost_per_plate']:.2f}")
+                st.write("**Ingredients:**")
+                for ing in json.loads(row['ingredients']):
+                    st.write(f"- {ing['item']}: {ing['qty']}{ing['unit']}")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✏️ Edit", key=f"edit_{row['id']}"):
+                        st.info("Edit feature coming soon.")
+                with col2:
+                    if st.button("🗑️ Delete", key=f"delete_{row['id']}"):
+                        supabase.table("recipes").delete().eq("id", row['id']).execute()
+                        st.success("Deleted")
+                        st.cache_data.clear()
+                        st.rerun()
+        # Export links
+        st.markdown(get_csv_download_link(df[["dish_name", "selling_price", "cost_per_plate"]], "recipes.csv"), unsafe_allow_html=True)
+        st.markdown(get_excel_download_link(df[["dish_name", "selling_price", "cost_per_plate"]], "recipes.xlsx"), unsafe_allow_html=True)
 
 # -------------------- Purchases Management (with dropdown) --------------------
 def purchases_management():
