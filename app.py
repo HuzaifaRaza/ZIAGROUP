@@ -164,7 +164,7 @@ def get_csv_download_link(df, filename):
     b64 = base64.b64encode(csv.encode()).decode()
     return f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 Download CSV</a>'
 
-# -------------------- Custom CSS for Modern UI --------------------
+# -------------------- Custom CSS --------------------
 def apply_custom_css(primary_color, logo_url=None):
     st.markdown(f"""
     <style>
@@ -185,20 +185,18 @@ def apply_custom_css(primary_color, logo_url=None):
         .main .block-container {{
             padding: 2rem 2rem;
         }}
-        /* Cards */
         .stMetric, div[data-testid="stExpander"], .stDataFrame, .stForm {{
             background-color: var(--card-bg);
             border-radius: 1rem;
             padding: 1.5rem;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
             border: 1px solid #e2e8f0;
             transition: all 0.2s;
         }}
         .stMetric:hover {{
             transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
         }}
-        /* Buttons */
         .stButton>button {{
             background-color: var(--primary);
             color: white;
@@ -211,76 +209,40 @@ def apply_custom_css(primary_color, logo_url=None):
         .stButton>button:hover {{
             background-color: var(--primary-light);
             transform: translateY(-1px);
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-        }}
-        .stButton>button:disabled {{
-            background-color: #cbd5e1;
-            cursor: not-allowed;
-        }}
-        /* Sidebar */
-        .css-1d391kg {{
-            background-color: var(--sidebar-bg);
-            color: #f1f5f9;
         }}
         .sidebar .stRadio > label {{
             color: #cbd5e1;
-            font-size: 0.95rem;
             padding: 0.5rem 1rem;
             border-radius: 0.5rem;
             margin: 0.25rem 0;
-            transition: all 0.2s;
         }}
         .sidebar .stRadio > label:hover {{
             background-color: #334155;
             color: white;
         }}
-        /* Headers */
         h1, h2, h3 {{
             color: var(--text-dark);
             font-weight: 600;
         }}
-        /* Inputs */
         .stTextInput>div>input, .stNumberInput>div>input, .stSelectbox>div>select {{
             border-radius: 0.5rem;
             border: 1px solid #e2e8f0;
             padding: 0.5rem;
-            background-color: white;
         }}
-        .stTextInput>div>input:focus, .stNumberInput>div>input:focus, .stSelectbox>div>select:focus {{
+        .stTextInput>div>input:focus {{
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px {primary_color}33;
-        }}
-        /* DataFrames */
-        .stDataFrame {{
-            overflow: hidden;
         }}
         .stDataFrame thead tr th {{
             background-color: #f8fafc;
             font-weight: 600;
-            color: var(--text-dark);
         }}
         .stDataFrame tbody tr:nth-child(even) {{
             background-color: #f8fafc;
         }}
-        /* Action buttons in tables */
-        .action-button {{
-            display: inline-block;
-            margin: 0 2px;
-        }}
-        /* Alerts */
-        .stAlert {{
-            border-radius: 0.5rem;
-            border-left-width: 4px;
-        }}
-        /* Expander */
-        .streamlit-expanderHeader {{
-            font-weight: 600;
-            color: var(--text-dark);
-        }}
     </style>
     """, unsafe_allow_html=True)
 
-# -------------------- Session State Init --------------------
+# -------------------- Session State --------------------
 if "user" not in st.session_state:
     st.session_state.user = None
 if "edit_id" not in st.session_state:
@@ -292,16 +254,15 @@ if "ingredients" not in st.session_state:
 
 # -------------------- Login Page --------------------
 def login_page():
-    st.markdown("<h1 style='text-align: center; margin-bottom: 2rem;'>Catering Management System</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>Catering Management System</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
         with st.form("login_form"):
             if logo_url := get_logo_url():
-                st.markdown(f'<div style="text-align: center; margin-bottom: 2rem;"><img src="{logo_url}" style="max-height: 80px;"></div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="text-align: center;"><img src="{logo_url}" style="max-height:80px;"></div>', unsafe_allow_html=True)
             email = st.text_input("Email", placeholder="super@catering.com")
-            password = st.text_input("Password", type="password", placeholder="••••••")
-            submitted = st.form_submit_button("Login", use_container_width=True)
-            if submitted:
+            password = st.text_input("Password", type="password")
+            if st.form_submit_button("Login", use_container_width=True):
                 user = login_user(email, password)
                 if user:
                     st.session_state.user = user
@@ -310,7 +271,7 @@ def login_page():
                 else:
                     st.error("Invalid credentials or inactive account")
 
-# -------------------- Dashboard (Role-Based) --------------------
+# -------------------- Dashboard --------------------
 def dashboard():
     user = st.session_state.user
     role = user["role"]
@@ -319,27 +280,26 @@ def dashboard():
 
     with st.sidebar:
         if logo_url := get_logo_url():
-            st.markdown(f'<div style="text-align: center; margin-bottom: 1rem;"><img src="{logo_url}" style="max-height: 60px;"></div>', unsafe_allow_html=True)
+            st.image(logo_url, width=150)
         st.markdown(f"### Welcome, {user['email']}")
         st.caption(f"Role: {role}")
 
         menu_options = {
-            "SuperUser": ["Dashboard", "Users", "Employees", "Raw Materials", "Recipes", "Purchases", "Monthly Ration", "Reports", "Settings", "Audit"],
-            "Admin": ["Dashboard", "Users", "Employees", "Raw Materials", "Recipes", "Purchases", "Monthly Ration", "Reports", "Audit"],
-            "Receiver": ["Dashboard", "Receive Material"],
-            "Chef": ["Dashboard", "Plan Menu", "Production", "Wastage", "Feedback Insights"],
-            "Cashier": ["Dashboard", "Billing", "Today's Summary"],
-            "Employee": ["Dashboard", "Give Feedback", "My Feedback History", "My Points"]
+            "SuperUser": ["Dashboard","Users","Employees","Raw Materials","Recipes","Purchases","Monthly Ration","Reports","Settings","Audit"],
+            "Admin": ["Dashboard","Users","Employees","Raw Materials","Recipes","Purchases","Monthly Ration","Reports","Audit"],
+            "Receiver": ["Dashboard","Receive Material"],
+            "Chef": ["Dashboard","Plan Menu","Production","Wastage","Feedback Insights"],
+            "Cashier": ["Dashboard","Billing","Today's Summary"],
+            "Employee": ["Dashboard","Give Feedback","My Feedback History","My Points"]
         }
         menu = menu_options.get(role, ["Dashboard"])
-        choice = st.radio("", menu, key="nav")
+        choice = st.radio("", menu)
 
         if st.button("Logout", use_container_width=True):
             log_audit("Logout", f"User {user['email']} logged out")
             st.session_state.user = None
             st.rerun()
 
-    # Page routing
     pages = {
         "Dashboard": show_dashboard,
         "Users": users_management,
@@ -364,23 +324,19 @@ def dashboard():
     }
     pages[choice]()
 
-# -------------------- Dashboard Stats (Cached) --------------------
+# -------------------- Dashboard Stats --------------------
 @st.cache_data(ttl=60)
 def get_dashboard_stats():
     today = datetime.date.today().isoformat()
     sales = supabase.table("sales").select("*").eq("date", today).execute()
     total_sales = sum(item["total"] for item in sales.data) if sales.data else 0
     meals_served = len(sales.data) if sales.data else 0
-
     employees = supabase.table("employees").select("*").eq("status", "Active").execute()
     active_employees = len(employees.data) if employees.data else 0
-
     low_stock = get_low_stock_details()
     low_stock_count = len(low_stock)
-
     feedback = supabase.table("feedback").select("rating").execute().data
     avg_rating = sum(f["rating"] for f in feedback)/len(feedback) if feedback else 0
-
     return {
         "today_sales": total_sales,
         "meals_served": meals_served,
@@ -399,7 +355,6 @@ def show_dashboard():
     cols[2].metric("Active Employees", stats['active_employees'])
     cols[3].metric("Low Stock Items", stats['low_stock'])
     st.metric("Average Rating", f"{stats['avg_rating']:.1f} / 5")
-
     if stats['low_stock_details']:
         st.subheader("⚠️ Low Stock Alerts")
         for item in stats['low_stock_details']:
@@ -407,27 +362,12 @@ def show_dashboard():
             level = reorder[0]["reorder_level"] if reorder else 0
             st.warning(f"{item['item']} only {item['quantity']} {item['unit']} left (Reorder level: {level})")
 
-# -------------------- Generic CRUD Helpers --------------------
+# -------------------- CRUD Helpers --------------------
 def render_crud_table(table_name, columns, display_columns, form_fields, fetch_func, insert_func, update_func, delete_func, key_field="id"):
-    """
-    Generic function to display a table with Add, Edit, Delete buttons.
-    - table_name: for session state keys
-    - columns: list of all columns in the table (for fetching)
-    - display_columns: list of columns to show in dataframe
-    - form_fields: list of dicts for form inputs [{"name":col, "type": "text|number|select", "options":[...]}]
-    - fetch_func: function that returns list of rows
-    - insert_func: function(row_data) -> bool
-    - update_func: function(id, row_data) -> bool
-    - delete_func: function(id) -> bool
-    - key_field: primary key column name
-    """
     st.subheader(table_name.replace("_", " ").title())
-    
-    # Add button
-    if st.button(f"➕ Add {table_name[:-1].title() if table_name.endswith('s') else table_name.title()}"):
+    if st.button(f"➕ Add {table_name[:-1].title()}"):
         st.session_state[f"add_{table_name}"] = True
-    
-    # Add form
+
     if st.session_state.get(f"add_{table_name}", False):
         with st.form(f"form_add_{table_name}"):
             row_data = {}
@@ -442,127 +382,90 @@ def render_crud_table(table_name, columns, display_columns, form_fields, fetch_f
                     row_data[field["name"]] = st.date_input(field["label"], datetime.date.today()).isoformat()
             if st.form_submit_button("Save"):
                 if insert_func(row_data):
-                    st.success("Added successfully")
+                    st.success("Added")
                     st.session_state[f"add_{table_name}"] = False
                     st.rerun()
                 else:
-                    st.error("Failed to add")
-    
-    # Fetch data
+                    st.error("Failed")
+
     data = fetch_func()
     if not data:
-        st.info("No records found")
+        st.info("No records")
         return
-    
+
     df = pd.DataFrame(data)
-    # Show dataframe with action buttons
-    col_order = display_columns + ["Actions"]
-    df_display = df[display_columns].copy()
-    
-    # Create action buttons
     for idx, row in df.iterrows():
         row_id = row[key_field]
-        col1, col2 = st.columns([1,1])
-        with col1:
-            if st.button(f"✏️ Edit", key=f"edit_{table_name}_{row_id}"):
-                st.session_state.edit_table = table_name
-                st.session_state.edit_id = row_id
-                st.session_state.edit_data = row.to_dict()
-        with col2:
-            if st.button(f"🗑️ Delete", key=f"delete_{table_name}_{row_id}"):
-                if delete_func(row_id):
-                    st.success("Deleted")
-                    st.rerun()
-                else:
-                    st.error("Delete failed")
-        st.write("---")
-    
-    # Display dataframe (without actions)
-    st.dataframe(df_display, use_container_width=True)
-    st.markdown(get_csv_download_link(df_display, f"{table_name}.csv"), unsafe_allow_html=True)
+        with st.expander(f"Record {idx+1}"):
+            st.write(row)
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button(f"✏️ Edit", key=f"edit_{table_name}_{row_id}"):
+                    st.session_state.edit_table = table_name
+                    st.session_state.edit_id = row_id
+                    st.session_state.edit_data = row.to_dict()
+            with col2:
+                if st.button(f"🗑️ Delete", key=f"delete_{table_name}_{row_id}"):
+                    if delete_func(row_id):
+                        st.success("Deleted")
+                        st.rerun()
+                    else:
+                        st.error("Delete failed")
+    st.dataframe(df[display_columns], use_container_width=True)
+    st.markdown(get_csv_download_link(df[display_columns], f"{table_name}.csv"), unsafe_allow_html=True)
 
-# -------------------- Users Management --------------------
+# -------------------- User Management --------------------
 def users_management():
     st.header("User Management")
-    
-    # Fetch function
-    def fetch_users():
-        return supabase.table("users").select("*").execute().data
-    
-    # Insert function
-    def insert_user(data):
+    def fetch(): return supabase.table("users").select("*").execute().data
+    def insert(data):
         try:
             supabase.table("users").insert(data).execute()
             log_audit("Add User", data["email"])
             return True
-        except:
-            return False
-    
-    # Update function
-    def update_user(id, data):
+        except: return False
+    def update(id, data):
         try:
             supabase.table("users").update(data).eq("id", id).execute()
             log_audit("Update User", data["email"])
             return True
-        except:
-            return False
-    
-    # Delete function
-    def delete_user(id):
+        except: return False
+    def delete(id):
         try:
             supabase.table("users").delete().eq("id", id).execute()
             log_audit("Delete User", str(id))
             return True
-        except:
-            return False
-    
+        except: return False
     form_fields = [
         {"name": "email", "label": "Email", "type": "text"},
         {"name": "role", "label": "Role", "type": "select", "options": ["SuperUser","Admin","Receiver","Chef","Cashier","Employee"]},
         {"name": "password", "label": "Password", "type": "text"},
         {"name": "status", "label": "Status", "type": "select", "options": ["Active","Inactive"]}
     ]
-    
-    render_crud_table("users", 
-                      columns=["id","email","role","password","status","created_at"],
-                      display_columns=["email","role","status"],
-                      form_fields=form_fields,
-                      fetch_func=fetch_users,
-                      insert_func=insert_user,
-                      update_func=update_user,
-                      delete_func=delete_user)
+    render_crud_table("users", ["id","email","role","status"], ["email","role","status"], form_fields, fetch, insert, update, delete)
 
 # -------------------- Employees Management --------------------
 def employees_management():
     st.header("Employees Management")
-    
-    def fetch_employees():
-        return supabase.table("employees").select("*").execute().data
-    
-    def insert_employee(data):
+    def fetch(): return supabase.table("employees").select("*").execute().data
+    def insert(data):
         try:
             supabase.table("employees").insert(data).execute()
             log_audit("Add Employee", data["emp_id"])
             return True
-        except:
-            return False
-    
-    def update_employee(id, data):
+        except: return False
+    def update(id, data):
         try:
             supabase.table("employees").update(data).eq("emp_id", id).execute()
             log_audit("Update Employee", id)
             return True
-        except:
-            return False
-    
-    def delete_employee(id):
+        except: return False
+    def delete(id):
         try:
             supabase.table("employees").delete().eq("emp_id", id).execute()
             log_audit("Delete Employee", id)
             return True
-        except:
-            return False
-    
+        except: return False
     form_fields = [
         {"name": "emp_id", "label": "Employee ID", "type": "text"},
         {"name": "name", "label": "Name", "type": "text"},
@@ -571,118 +474,56 @@ def employees_management():
         {"name": "status", "label": "Status", "type": "select", "options": ["Active","Inactive"]},
         {"name": "dietary_pref", "label": "Dietary Preference", "type": "select", "options": ["Regular","Vegetarian","Jain","Gluten-Free"]}
     ]
-    
-    render_crud_table("employees",
-                      columns=["emp_id","name","department","designation","status","dietary_pref"],
-                      display_columns=["emp_id","name","department","designation","status","dietary_pref"],
-                      form_fields=form_fields,
-                      fetch_func=fetch_employees,
-                      insert_func=insert_employee,
-                      update_func=update_employee,
-                      delete_func=delete_employee,
-                      key_field="emp_id")
+    render_crud_table("employees", ["emp_id","name","department","status"], ["emp_id","name","department","status"], form_fields, fetch, insert, update, delete, key_field="emp_id")
 
-# -------------------- Raw Materials Management --------------------
+# -------------------- Raw Materials --------------------
 def raw_materials_management():
     st.header("Raw Materials")
-    
-    def fetch_raw():
-        return supabase.table("raw_materials").select("*").execute().data
-    
-    def insert_raw(data):
+    def fetch(): return supabase.table("raw_materials").select("*").execute().data
+    def insert(data):
         try:
             supabase.table("raw_materials").insert(data).execute()
-            # Also init stock if not exists
+            # create stock entry
             stock = supabase.table("stock").select("*").eq("item", data["name"]).execute()
             if not stock.data:
-                supabase.table("stock").insert({
-                    "item": data["name"],
-                    "quantity": 0,
-                    "unit": data["unit"]
-                }).execute()
+                supabase.table("stock").insert({"item": data["name"], "quantity": 0, "unit": data["unit"]}).execute()
             log_audit("Add Raw Material", data["name"])
             return True
-        except:
-            return False
-    
-    def update_raw(id, data):
+        except: return False
+    def update(id, data):
         try:
             supabase.table("raw_materials").update(data).eq("id", id).execute()
-            # Update stock unit if changed
             supabase.table("stock").update({"unit": data["unit"]}).eq("item", data["name"]).execute()
             log_audit("Update Raw Material", data["name"])
             return True
-        except:
-            return False
-    
-    def delete_raw(id):
+        except: return False
+    def delete(id):
         try:
-            # Also delete from stock
             item = supabase.table("raw_materials").select("name").eq("id", id).execute().data[0]["name"]
             supabase.table("stock").delete().eq("item", item).execute()
             supabase.table("raw_materials").delete().eq("id", id).execute()
             log_audit("Delete Raw Material", item)
             return True
-        except:
-            return False
-    
+        except: return False
     form_fields = [
         {"name": "name", "label": "Item Name", "type": "text"},
         {"name": "unit", "label": "Unit", "type": "select", "options": ["KG","Liter","Pieces"]},
         {"name": "current_rate", "label": "Current Rate (Rs)", "type": "number"},
         {"name": "reorder_level", "label": "Reorder Level", "type": "number"}
     ]
-    
-    render_crud_table("raw_materials",
-                      columns=["id","name","unit","current_rate","reorder_level"],
-                      display_columns=["name","unit","current_rate","reorder_level"],
-                      form_fields=form_fields,
-                      fetch_func=fetch_raw,
-                      insert_func=insert_raw,
-                      update_func=update_raw,
-                      delete_func=delete_raw)
+    render_crud_table("raw_materials", ["id","name","unit","current_rate","reorder_level"], ["name","unit","current_rate","reorder_level"], form_fields, fetch, insert, update, delete)
 
-# -------------------- Recipes Management (Dynamic Ingredients) --------------------
+# -------------------- Recipes --------------------
 def recipes_management():
     st.header("Recipes")
-    
-    def fetch_recipes():
-        return supabase.table("recipes").select("*").execute().data
-    
-    def insert_recipe(data):
-        try:
-            supabase.table("recipes").insert(data).execute()
-            log_audit("Add Recipe", data["dish_name"])
-            return True
-        except:
-            return False
-    
-    def update_recipe(id, data):
-        try:
-            supabase.table("recipes").update(data).eq("id", id).execute()
-            log_audit("Update Recipe", data["dish_name"])
-            return True
-        except:
-            return False
-    
-    def delete_recipe(id):
-        try:
-            supabase.table("recipes").delete().eq("id", id).execute()
-            log_audit("Delete Recipe", str(id))
-            return True
-        except:
-            return False
-    
-    # Custom add form with dynamic ingredients
     if st.button("➕ Add Recipe"):
         st.session_state.add_recipe = True
-    
+
     if st.session_state.get("add_recipe", False):
         with st.form("add_recipe_form"):
             dish_name = st.text_input("Dish Name")
             selling_price = st.number_input("Selling Price", min_value=0.0, step=0.01)
             st.write("Ingredients")
-            # Ingredient rows from session state
             for i, ing in enumerate(st.session_state.ingredients):
                 cols = st.columns([4,2,2,1])
                 with cols[0]:
@@ -692,12 +533,10 @@ def recipes_management():
                 with cols[2]:
                     ing["unit"] = st.selectbox(f"Unit {i+1}", ["g","ml","pcs"], index=["g","ml","pcs"].index(ing["unit"]), key=f"unit_{i}")
                 with cols[3]:
-                    if i > 0:
-                        if st.button("❌", key=f"remove_{i}"):
-                            st.session_state.ingredients.pop(i)
-                            st.rerun()
-            # Buttons to add/remove ingredients
-            col1, col2 = st.columns([1,5])
+                    if i > 0 and st.button("❌", key=f"remove_{i}"):
+                        st.session_state.ingredients.pop(i)
+                        st.rerun()
+            col1, col2 = st.columns(2)
             with col1:
                 if st.button("➕ Add Ingredient"):
                     st.session_state.ingredients.append({"item": "", "qty": 0.0, "unit": "g"})
@@ -706,12 +545,10 @@ def recipes_management():
                 if st.button("🗑️ Clear All"):
                     st.session_state.ingredients = [{"item": "", "qty": 0.0, "unit": "g"}]
                     st.rerun()
-            
-            submitted = st.form_submit_button("Save")
-            if submitted:
-                ingredients = [ing for ing in st.session_state.ingredients if ing["item"].strip() and ing["qty"] > 0]
+            if st.form_submit_button("Save Recipe"):
+                ingredients = [ing for ing in st.session_state.ingredients if ing["item"].strip() and ing["qty"]>0]
                 if not ingredients:
-                    st.error("Add at least one valid ingredient")
+                    st.error("At least one ingredient required")
                 else:
                     cost = calculate_recipe_cost(ingredients)
                     data = {
@@ -720,47 +557,46 @@ def recipes_management():
                         "selling_price": selling_price,
                         "cost_per_plate": cost
                     }
-                    if insert_recipe(data):
+                    try:
+                        supabase.table("recipes").insert(data).execute()
                         st.success("Recipe added")
                         st.session_state.add_recipe = False
                         st.session_state.ingredients = [{"item": "", "qty": 0.0, "unit": "g"}]
+                        log_audit("Add Recipe", dish_name)
                         st.rerun()
-    
-    # Display recipes with edit/delete
-    recipes = fetch_recipes()
+                    except Exception as e:
+                        st.error(str(e))
+
+    recipes = supabase.table("recipes").select("*").execute().data
     if recipes:
         df = pd.DataFrame(recipes)
-        for idx, row in df.iterrows():
+        for _, row in df.iterrows():
             with st.expander(f"{row['dish_name']} - Rs {row['selling_price']}"):
                 st.write(f"**Cost per plate:** Rs {row['cost_per_plate']}")
-                st.write("**Ingredients:**")
-                ingredients = json.loads(row['ingredients'])
-                for ing in ingredients:
-                    st.write(f"- {ing['item']}: {ing['qty']} {ing['unit']}")
-                col1, col2 = st.columns([1,1])
+                st.write("Ingredients:")
+                for ing in json.loads(row['ingredients']):
+                    st.write(f"- {ing['item']}: {ing['qty']}{ing['unit']}")
+                col1, col2 = st.columns(2)
                 with col1:
-                    if st.button(f"✏️ Edit", key=f"edit_recipe_{row['id']}"):
-                        st.session_state.edit_recipe_id = row['id']
-                        st.session_state.edit_recipe_data = row
+                    if st.button("✏️ Edit", key=f"edit_recipe_{row['id']}"):
+                        # Edit functionality can be added similarly
+                        st.info("Edit coming soon")
                 with col2:
-                    if st.button(f"🗑️ Delete", key=f"delete_recipe_{row['id']}"):
-                        if delete_recipe(row['id']):
-                            st.success("Deleted")
-                            st.rerun()
+                    if st.button("🗑️ Delete", key=f"delete_recipe_{row['id']}"):
+                        supabase.table("recipes").delete().eq("id", row['id']).execute()
+                        st.success("Deleted")
+                        st.rerun()
         st.markdown(get_csv_download_link(df[["dish_name","selling_price","cost_per_plate"]], "recipes.csv"), unsafe_allow_html=True)
 
-# -------------------- Purchases Management --------------------
+# -------------------- Purchases --------------------
 def purchases_management():
     st.header("Purchases")
-    
-    def fetch_purchases():
-        return supabase.table("purchases").select("*").order("date", desc=True).execute().data
-    
-    def insert_purchase(data):
+    def fetch(): return supabase.table("purchases").select("*").order("date", desc=True).execute().data
+    def insert(data):
         try:
             data["total"] = data["quantity"] * data["rate"]
             supabase.table("purchases").insert(data).execute()
-            # Update stock
+            # update stock
             stock = supabase.table("stock").select("*").eq("item", data["item"]).execute()
             if stock.data:
                 current = stock.data[0]["quantity"]
@@ -774,27 +610,20 @@ def purchases_management():
                     "quantity": data["quantity"],
                     "unit": data["unit"]
                 }).execute()
-            # Update raw material rate
+            # update raw material rate
             supabase.table("raw_materials").update({"current_rate": data["rate"]}).eq("name", data["item"]).execute()
             log_audit("Add Purchase", f"{data['item']} {data['quantity']}{data['unit']}")
             return True
-        except:
-            return False
-    
-    def update_purchase(id, data):
-        # Complex due to stock implications; we can disable edit for purchases
-        st.warning("Edit not supported; delete and re-add if needed.")
+        except: return False
+    def update(id, data):
+        st.warning("Edit not supported; delete and re-add")
         return False
-    
-    def delete_purchase(id):
+    def delete(id):
         try:
-            # Optionally revert stock? For simplicity, just delete
             supabase.table("purchases").delete().eq("id", id).execute()
             log_audit("Delete Purchase", str(id))
             return True
-        except:
-            return False
-    
+        except: return False
     form_fields = [
         {"name": "date", "label": "Date", "type": "date"},
         {"name": "item", "label": "Item", "type": "text"},
@@ -803,62 +632,37 @@ def purchases_management():
         {"name": "rate", "label": "Rate (Rs)", "type": "number"},
         {"name": "supplier", "label": "Supplier", "type": "text"}
     ]
-    
-    render_crud_table("purchases",
-                      columns=["id","date","item","quantity","unit","rate","total","supplier"],
-                      display_columns=["date","item","quantity","unit","rate","total","supplier"],
-                      form_fields=form_fields,
-                      fetch_func=fetch_purchases,
-                      insert_func=insert_purchase,
-                      update_func=update_purchase,
-                      delete_func=delete_purchase)
+    render_crud_table("purchases", ["id","date","item","quantity","unit","rate","total","supplier"], ["date","item","quantity","unit","rate","total","supplier"], form_fields, fetch, insert, update, delete)
 
-# -------------------- Monthly Ration Management --------------------
+# -------------------- Monthly Ration --------------------
 def monthly_ration_management():
     st.header("Monthly Ration")
-    
-    def fetch_ration():
-        return supabase.table("monthly_ration").select("*").order("month", desc=True).execute().data
-    
-    def insert_ration(data):
+    def fetch(): return supabase.table("monthly_ration").select("*").order("month", desc=True).execute().data
+    def insert(data):
         try:
             supabase.table("monthly_ration").insert(data).execute()
             log_audit("Add Monthly Ration", f"{data['month']} {data['item']}")
             return True
-        except:
-            return False
-    
-    def update_ration(id, data):
+        except: return False
+    def update(id, data):
         try:
             supabase.table("monthly_ration").update(data).eq("id", id).execute()
             log_audit("Update Monthly Ration", str(id))
             return True
-        except:
-            return False
-    
-    def delete_ration(id):
+        except: return False
+    def delete(id):
         try:
             supabase.table("monthly_ration").delete().eq("id", id).execute()
             log_audit("Delete Monthly Ration", str(id))
             return True
-        except:
-            return False
-    
+        except: return False
     form_fields = [
         {"name": "month", "label": "Month (YYYY-MM)", "type": "text"},
         {"name": "item", "label": "Item", "type": "text"},
         {"name": "target_qty", "label": "Target Quantity", "type": "number"},
         {"name": "unit", "label": "Unit", "type": "select", "options": ["KG","Liter","Pieces"]}
     ]
-    
-    render_crud_table("monthly_ration",
-                      columns=["id","month","item","target_qty","unit"],
-                      display_columns=["month","item","target_qty","unit"],
-                      form_fields=form_fields,
-                      fetch_func=fetch_ration,
-                      insert_func=insert_ration,
-                      update_func=update_ration,
-                      delete_func=delete_ration)
+    render_crud_table("monthly_ration", ["id","month","item","target_qty","unit"], ["month","item","target_qty","unit"], form_fields, fetch, insert, update, delete)
 
 # -------------------- Receiver --------------------
 def receive_material_page():
@@ -885,7 +689,7 @@ def receive_material_page():
                     "received_by": st.session_state.user["email"],
                     "batch_no": batch
                 }).execute()
-                # Update stock
+                # update stock
                 stock = supabase.table("stock").select("*").eq("item", item).execute()
                 if stock.data:
                     current = stock.data[0]["quantity"]
@@ -917,13 +721,11 @@ def plan_menu_page():
     if not recipes:
         st.warning("No recipes found")
         return
-
     production_data = []
     for r in recipes:
         persons = st.number_input(f"Persons for {r['dish_name']}", min_value=0, step=1, key=r['id'])
         if persons > 0:
             production_data.append({"dish": r['dish_name'], "persons": persons})
-
     if st.button("Check Stock & Confirm"):
         all_sufficient = True
         insufficient_items = []
@@ -963,8 +765,7 @@ def production_page():
     today = datetime.date.today().isoformat()
     prods = supabase.table("production").select("*").eq("date", today).execute().data
     if prods:
-        df = pd.DataFrame(prods)
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(pd.DataFrame(prods), use_container_width=True)
 
 def wastage_page():
     st.header("Wastage Entry")
@@ -1018,7 +819,6 @@ def billing_page():
             st.info(f"Outstanding: Rs {outstanding}")
         else:
             st.error("Employee not found")
-
     today = datetime.date.today().isoformat()
     productions = supabase.table("production").select("*").eq("date", today).execute().data
     if productions:
@@ -1031,15 +831,12 @@ def billing_page():
                 qty = st.number_input(f"Qty for {dish}", min_value=0, step=1, key=dish)
             if qty:
                 selected_items[dish] = qty
-
         total = 0
         for dish, qty in selected_items.items():
             price = supabase.table("recipes").select("selling_price").eq("dish_name", dish).execute().data[0]["selling_price"]
             total += price * qty
-
         st.metric("Total", f"Rs {total}")
-
-        payment = st.radio("Payment Status", ["PAID", "UNPAID"], horizontal=True)
+        payment = st.radio("Payment Status", ["PAID","UNPAID"], horizontal=True)
         if st.button("Save Bill"):
             if not emp_id or not emp:
                 st.error("Valid Employee ID required")
@@ -1066,7 +863,6 @@ def billing_page():
                 }).execute()
             st.success("Bill saved")
             log_audit("Sale", order_id)
-
             pdf_bytes = generate_receipt(order_id, emp[0]['name'], selected_items, total, payment)
             st.markdown(get_pdf_download_link(pdf_bytes, f"receipt_{order_id}.pdf"), unsafe_allow_html=True)
     else:
@@ -1117,7 +913,7 @@ def employee_feedback():
                         "comments": comments,
                         "points": 10
                     }).execute()
-                    st.success("Thank you for your feedback! You earned 10 points.")
+                    st.success("Thank you! You earned 10 points.")
                     st.rerun()
         else:
             st.warning("No meals found for this employee")
@@ -1139,12 +935,11 @@ def my_points():
     if emp_id:
         points = get_employee_points(emp_id)
         st.metric("Total Points", points)
-        st.info("Redeem options coming soon!")
 
-# -------------------- Reports (Advanced) --------------------
+# -------------------- Reports --------------------
 def reports_page():
     st.header("Reports")
-    report_type = st.selectbox("Report Type", ["Sales", "Stock", "Wastage", "Feedback", "Profit & Loss", "Ledger"])
+    report_type = st.selectbox("Report Type", ["Sales","Stock","Wastage","Feedback","Profit & Loss","Ledger"])
     start = st.date_input("Start Date")
     end = st.date_input("End Date")
     if st.button("Generate"):
@@ -1157,7 +952,6 @@ def reports_page():
                 headers = ["Date","Order ID","Employee","Total","Status"]
                 data = df[["date","order_id","emp_id","total","payment_status"]].values.tolist()
                 st.dataframe(df, use_container_width=True)
-                # Chart
                 sales_by_date = df.groupby("date")["total"].sum().reset_index()
                 fig = px.line(sales_by_date, x="date", y="total", title="Sales Trend")
                 st.plotly_chart(fig, use_container_width=True)
@@ -1175,7 +969,6 @@ def reports_page():
                 headers = ["Date","Item","Quantity","Unit","Reason"]
                 data = df[["date","item","quantity","unit","reason"]].values.tolist()
                 st.dataframe(df, use_container_width=True)
-                # Pie chart by reason
                 reason_counts = df["reason"].value_counts().reset_index()
                 reason_counts.columns = ["Reason","Count"]
                 fig = px.pie(reason_counts, values="Count", names="Reason", title="Wastage by Reason")
@@ -1187,7 +980,6 @@ def reports_page():
                 headers = ["Date","Employee","Dish","Rating","Ate%","Reason"]
                 data = df[["date","emp_id","dish","rating","ate_percent","reason"]].values.tolist()
                 st.dataframe(df, use_container_width=True)
-                # Avg rating by dish
                 avg_rating = df.groupby("dish")["rating"].mean().reset_index()
                 fig = px.bar(avg_rating, x="dish", y="rating", title="Average Rating by Dish")
                 st.plotly_chart(fig, use_container_width=True)
@@ -1209,12 +1001,11 @@ def reports_page():
                 headers = ["Employee","Date","Debit","Credit","Balance"]
                 data = df[["emp_id","date","debit","credit","balance"]].values.tolist()
                 st.dataframe(df, use_container_width=True)
-
         if data:
             pdf_bytes = generate_pdf_report(f"{report_type} Report", data, headers, f"{report_type}.pdf")
             st.markdown(get_pdf_download_link(pdf_bytes, f"{report_type}_report.pdf"), unsafe_allow_html=True)
 
-# -------------------- Settings (SuperUser) --------------------
+# -------------------- Settings --------------------
 def settings_page():
     st.header("System Settings")
     settings = supabase.table("settings").select("*").execute().data
@@ -1223,8 +1014,8 @@ def settings_page():
         app_name = st.text_input("App Name", settings_dict.get("app_name", ""))
         company = st.text_input("Company Name", settings_dict.get("company_name", ""))
         color = st.color_picker("Primary Color", settings_dict.get("primary_color", "#3498db"))
-        date_fmt = st.selectbox("Date Format", ["DD-MM-YYYY", "MM-DD-YYYY", "YYYY-MM-DD"], index=0)
-        logo_file = st.file_uploader("Upload Logo (image)", type=["png","jpg","jpeg"])
+        date_fmt = st.selectbox("Date Format", ["DD-MM-YYYY","MM-DD-YYYY","YYYY-MM-DD"], index=0)
+        logo_file = st.file_uploader("Upload Logo", type=["png","jpg","jpeg"])
         if st.form_submit_button("Save"):
             logo_url = settings_dict.get("logo_url", "")
             if logo_file:
@@ -1232,7 +1023,8 @@ def settings_page():
                 file_name = f"logo_{int(time.time())}.png"
                 supabase.storage.from_("logos").upload(file_name, file_bytes, {"content-type": logo_file.type})
                 logo_url = file_name
-            for key, val in [("app_name", app_name), ("company_name", company), ("primary_color", color), ("date_format", date_fmt), ("logo_url", logo_url)]:
+            updates = [("app_name", app_name), ("company_name", company), ("primary_color", color), ("date_format", date_fmt), ("logo_url", logo_url)]
+            for key, val in updates:
                 supabase.table("settings").upsert({"key": key, "value": val}).execute()
             st.success("Settings saved")
             log_audit("Settings", "Updated")
