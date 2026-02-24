@@ -19,7 +19,7 @@ st.set_page_config(
     menu_items={
         'Get Help': None,
         'Report a bug': None,
-        'About': 'Catering Management System v6.0'
+        'About': 'Catering Management System v7.0'
     }
 )
 
@@ -42,8 +42,8 @@ def get_recipes():
     return supabase.table("recipes").select("*").execute().data
 
 @st.cache_data(ttl=300)
-def get_employees_active():
-    return supabase.table("employees").select("*").eq("status", "Active").execute().data
+def get_employees_all():
+    return supabase.table("employees").select("*").execute().data
 
 @st.cache_data(ttl=60)
 def get_sales_range(start_date, end_date):
@@ -64,6 +64,10 @@ def get_wastage_range(start_date, end_date):
 @st.cache_data(ttl=300)
 def get_all_production():
     return supabase.table("production").select("*").execute().data
+
+@st.cache_data(ttl=300)
+def get_all_stock():
+    return supabase.table("stock").select("*").execute().data
 
 # -------------------- Utility Functions --------------------
 def get_settings():
@@ -139,7 +143,7 @@ def check_stock_sufficient(ingredients, persons):
     return len(insufficient) == 0, insufficient
 
 def get_low_stock_details():
-    stock_data = supabase.table("stock").select("item, quantity, unit").execute().data
+    stock_data = get_all_stock()
     raw_data = get_raw_materials()
     reorder_map = {r["name"]: r["reorder_level"] for r in raw_data}
     low_stock = []
@@ -163,22 +167,47 @@ def check_low_stock_notifications():
     for item in low_stock:
         st.toast(f"⚠️ Low stock: {item['item']} only {item['quantity']} left", icon="⚠️")
 
-# -------------------- PDF/Export Functions --------------------
-def generate_pdf_report(title, data, headers, filename):
+# -------------------- Professional PDF Generation --------------------
+def generate_professional_pdf(title, data, headers, filename, landscape=False, logo_url=None, company_name=None):
     pdf = FPDF()
-    pdf.add_page()
+    if landscape:
+        pdf.add_page(orientation='L')
+    else:
+        pdf.add_page()
+    
+    # Logo and header
+    if logo_url:
+        # Download logo from URL (simplified: use local file, but here we skip)
+        pdf.image(logo_url, x=10, y=8, w=33)
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, title, ln=1, align="C")
+    if company_name:
+        pdf.set_font("Arial", "", 10)
+        pdf.cell(0, 5, company_name, ln=1, align="C")
     pdf.ln(10)
-    pdf.set_font("Arial", "B", 12)
-    for i, header in enumerate(headers):
-        pdf.cell(40, 10, header, 1)
+    
+    # Column widths (auto)
+    col_width = pdf.w / (len(headers) + 1) - 1
+    pdf.set_font("Arial", "B", 10)
+    for header in headers:
+        pdf.cell(col_width, 8, header, 1, 0, 'C')
     pdf.ln()
-    pdf.set_font("Arial", "", 10)
+    
+    pdf.set_font("Arial", "", 8)
     for row in data:
         for i, cell in enumerate(row):
-            pdf.cell(40, 10, str(cell), 1)
+            # Truncate if too long
+            cell_str = str(cell)
+            if len(cell_str) > 30:
+                cell_str = cell_str[:27] + "..."
+            pdf.cell(col_width, 6, cell_str, 1, 0, 'L' if i>0 else 'C')
         pdf.ln()
+    
+    # Footer
+    pdf.set_y(-15)
+    pdf.set_font("Arial", "I", 8)
+    pdf.cell(0, 10, f"Generated on {datetime.datetime.now().strftime('%d-%m-%Y %H:%M')} - Page {pdf.page_no()}", 0, 0, 'C')
+    
     return pdf.output(dest="S").encode("latin1")
 
 def generate_receipt(order_id, emp_name, items, total, payment_status):
@@ -633,8 +662,8 @@ def get_dashboard_stats():
     sales = supabase.table("sales").select("*").eq("date", today).execute()
     total_sales = sum(item["total"] for item in sales.data) if sales.data else 0
     meals_served = len(sales.data) if sales.data else 0
-    employees = get_employees_active()
-    active_employees = len(employees) if employees else 0
+    employees = get_employees_all()
+    active_employees = sum(1 for e in employees if e.get('status') == 'Active')
     low_stock = get_low_stock_details()
     low_stock_count = len(low_stock)
     feedback = supabase.table("feedback").select("rating").execute().data
@@ -665,8 +694,8 @@ def show_dashboard():
             level = reorder[0]["reorder_level"] if reorder else 0
             st.warning(f"{item['item']} only {item['quantity']} {item['unit']} left (Reorder level: {level})")
 
-# -------------------- Improved CRUD Helper (with full Edit) --------------------
-def render_crud_table(table_name, columns, display_columns, form_fields, fetch_func, insert_func, update_func, delete_func, key_field="id", searchable=True):
+# -------------------- Improved CRUD Helper (with friendly expander title) --------------------
+def render_crud_table(table_name, columns, display_columns, form_fields, fetch_func, insert_func, update_func, delete_func, key_field="id", searchable=True, title_field=None):
     st.subheader(table_name.replace("_", " ").title())
     
     # Add button
@@ -722,14 +751,19 @@ def render_crud_table(table_name, columns, display_columns, form_fields, fetch_f
     else:
         df_page = df
 
-    # Main table
+    # Main table (hide key field)
     st.dataframe(df_page[display_columns], use_container_width=True)
 
     # Expandable details for each record with inline edit
     for idx, row in df_page.iterrows():
         record_id = row[key_field]
+        # Determine a friendly title for the expander
+        if title_field and title_field in row:
+            friendly_id = row[title_field]
+        else:
+            friendly_id = f"Record {idx+1}"
         expander_key = f"expander_{table_name}_{record_id}"
-        with st.expander(f"Record {idx+1} (ID: {record_id})"):
+        with st.expander(f"Details for {friendly_id}"):
             # Check if this record is in edit mode
             edit_key = f"edit_mode_{table_name}_{record_id}"
             if st.session_state.edit_mode.get(edit_key, False):
@@ -743,12 +777,10 @@ def render_crud_table(table_name, columns, display_columns, form_fields, fetch_f
                         elif field["type"] == "number":
                             updated_data[field["name"]] = st.number_input(field["label"], value=float(current_value), step=0.01, format="%.2f")
                         elif field["type"] == "select":
-                            # current_value might not be in options? we'll set index based on value
                             options = field["options"]
                             default_index = options.index(current_value) if current_value in options else 0
                             updated_data[field["name"]] = st.selectbox(field["label"], options, index=default_index)
                         elif field["type"] == "date":
-                            # assuming date is string like YYYY-MM-DD
                             date_val = datetime.datetime.strptime(current_value, "%Y-%m-%d").date() if current_value else datetime.date.today()
                             updated_data[field["name"]] = st.date_input(field["label"], date_val).isoformat()
                     col1, col2 = st.columns(2)
@@ -773,7 +805,6 @@ def render_crud_table(table_name, columns, display_columns, form_fields, fetch_f
                     with cols[field_index % 2]:
                         st.markdown(f"**{col_name}:** {row[col_name]}")
                     field_index += 1
-                # Show all fields optionally
                 # Buttons
                 col1, col2 = st.columns(2)
                 with col1:
@@ -827,7 +858,7 @@ def users_management():
         {"name": "password", "label": "Password", "type": "text"},
         {"name": "status", "label": "Status", "type": "select", "options": ["Active","Inactive"]}
     ]
-    render_crud_table("users", ["id","email","role","status"], ["email","role","status"], form_fields, fetch, insert, update, delete)
+    render_crud_table("users", ["id","email","role","status"], ["email","role","status"], form_fields, fetch, insert, update, delete, title_field="email")
 
 # -------------------- Employees Management --------------------
 def employees_management():
@@ -865,7 +896,7 @@ def employees_management():
         {"name": "status", "label": "Status", "type": "select", "options": ["Active","Inactive"]},
         {"name": "dietary_pref", "label": "Dietary Preference", "type": "select", "options": ["Regular","Vegetarian","Jain","Gluten-Free"]}
     ]
-    render_crud_table("employees", ["emp_id","name","department","status"], ["emp_id","name","department","status"], form_fields, fetch, insert, update, delete, key_field="emp_id")
+    render_crud_table("employees", ["emp_id","name","department","status"], ["emp_id","name","department","status"], form_fields, fetch, insert, update, delete, key_field="emp_id", title_field="name")
 
 # -------------------- Raw Materials --------------------
 def raw_materials_management():
@@ -911,7 +942,7 @@ def raw_materials_management():
         {"name": "current_rate", "label": "Current Rate (Rs)", "type": "number"},
         {"name": "reorder_level", "label": "Reorder Level", "type": "number"}
     ]
-    render_crud_table("raw_materials", ["id","name","unit","current_rate","reorder_level"], ["name","unit","current_rate","reorder_level"], form_fields, fetch, insert, update, delete)
+    render_crud_table("raw_materials", ["id","name","unit","current_rate","reorder_level"], ["name","unit","current_rate","reorder_level"], form_fields, fetch, insert, update, delete, title_field="name")
 
 # -------------------- Recipes --------------------
 def recipes_management():
@@ -986,7 +1017,7 @@ def recipes_management():
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("✏️ Edit", key=f"edit_recipe_{row['id']}"):
-                        st.info("Edit coming soon")  # For simplicity, edit not implemented for recipes
+                        st.info("Edit coming soon")
                 with col2:
                     if st.button("🗑️ Delete", key=f"delete_recipe_{row['id']}"):
                         supabase.table("recipes").delete().eq("id", row['id']).execute()
@@ -1028,11 +1059,8 @@ def purchases_management():
             return False
     def update(id, data):
         try:
-            # For simplicity, we allow update of purchase records (but note: stock implications)
-            # First, get old record to revert stock changes? Complex. We'll just update.
-            # In a real system, you might want to restrict editing purchases.
             supabase.table("purchases").update(data).eq("id", id).execute()
-            # Also update stock? This is tricky. We'll just update the record and warn.
+            # Optionally update stock? Complex, we just update the record.
             st.warning("Purchase updated. Stock was not automatically adjusted; please check manually.")
             log_audit("Update Purchase", str(id))
             st.cache_data.clear()
@@ -1057,7 +1085,7 @@ def purchases_management():
         {"name": "rate", "label": "Rate (Rs)", "type": "number"},
         {"name": "supplier", "label": "Supplier", "type": "text"}
     ]
-    render_crud_table("purchases", ["id","date","item","quantity","unit","rate","total","supplier"], ["date","item","quantity","unit","rate","total","supplier"], form_fields, fetch, insert, update, delete)
+    render_crud_table("purchases", ["id","date","item","quantity","unit","rate","total","supplier"], ["date","item","quantity","unit","rate","total","supplier"], form_fields, fetch, insert, update, delete, title_field="item")
 
 # -------------------- Monthly Ration --------------------
 def monthly_ration_management():
@@ -1096,7 +1124,7 @@ def monthly_ration_management():
         {"name": "target_qty", "label": "Target Quantity", "type": "number"},
         {"name": "unit", "label": "Unit", "type": "select", "options": ["KG","Liter","Pieces"]}
     ]
-    render_crud_table("monthly_ration", ["id","month","item","target_qty","unit"], ["month","item","target_qty","unit"], form_fields, fetch, insert, update, delete)
+    render_crud_table("monthly_ration", ["id","month","item","target_qty","unit"], ["month","item","target_qty","unit"], form_fields, fetch, insert, update, delete, title_field="item")
 
 # -------------------- Receiver --------------------
 def receive_material_page():
@@ -1412,7 +1440,7 @@ def monthly_ration_analysis():
                 qty = qty / 1000
             consumption[ing['item']] = consumption.get(ing['item'], 0) + qty
 
-    stock_data = supabase.table("stock").select("*").execute().data
+    stock_data = get_all_stock()
     stock_map = {s['item']: s['quantity'] for s in stock_data}
 
     report = []
@@ -1438,8 +1466,128 @@ def monthly_ration_analysis():
                  title=f"Monthly Ration Consumption - {month}")
     st.plotly_chart(fig, use_container_width=True)
 
+    # Export
     st.markdown(get_csv_download_link(df, f"monthly_ration_{month}.csv"), unsafe_allow_html=True)
     st.markdown(get_excel_download_link(df, f"monthly_ration_{month}.xlsx"), unsafe_allow_html=True)
+    if st.button("📥 Download PDF Report"):
+        pdf_bytes = generate_professional_pdf(
+            title=f"Monthly Ration Analysis - {month}",
+            data=df.values.tolist(),
+            headers=df.columns.tolist(),
+            filename=f"monthly_ration_{month}.pdf",
+            landscape=True,
+            logo_url=get_logo_url(),
+            company_name=get_settings().get("company_name", "")
+        )
+        st.markdown(get_pdf_download_link(pdf_bytes, f"monthly_ration_{month}.pdf"), unsafe_allow_html=True)
+
+# -------------------- Employee Details Report --------------------
+def employee_details_report():
+    st.header("Employee Details Report")
+    employees = get_employees_all()
+    if not employees:
+        st.info("No employees found")
+        return
+    df = pd.DataFrame(employees)
+    # Filter by department
+    depts = df['department'].unique()
+    selected_dept = st.selectbox("Filter by Department", ["All"] + list(depts))
+    if selected_dept != "All":
+        df = df[df['department'] == selected_dept]
+    st.dataframe(df, use_container_width=True)
+    st.markdown(get_csv_download_link(df, "employee_details.csv"), unsafe_allow_html=True)
+    st.markdown(get_excel_download_link(df, "employee_details.xlsx"), unsafe_allow_html=True)
+    if st.button("📥 Download PDF Report"):
+        pdf_bytes = generate_professional_pdf(
+            title="Employee Details Report",
+            data=df.values.tolist(),
+            headers=df.columns.tolist(),
+            filename="employee_details.pdf",
+            landscape=True,
+            logo_url=get_logo_url(),
+            company_name=get_settings().get("company_name", "")
+        )
+        st.markdown(get_pdf_download_link(pdf_bytes, "employee_details.pdf"), unsafe_allow_html=True)
+
+# -------------------- Inventory Report --------------------
+def inventory_report():
+    st.header("Inventory Report")
+    stock = get_all_stock()
+    raw_materials = get_raw_materials()
+    if not stock:
+        st.info("No stock data")
+        return
+    # Merge with raw materials to get rates
+    df_stock = pd.DataFrame(stock)
+    df_raw = pd.DataFrame(raw_materials)
+    merged = pd.merge(df_stock, df_raw[['name','current_rate','reorder_level']], left_on='item', right_on='name', how='left')
+    merged['value'] = merged['quantity'] * merged['current_rate']
+    merged['status'] = merged.apply(lambda row: 'Low Stock' if row['quantity'] <= row['reorder_level'] else 'OK', axis=1)
+    display_cols = ['item', 'quantity', 'unit', 'current_rate', 'value', 'reorder_level', 'status', 'last_updated']
+    st.dataframe(merged[display_cols], use_container_width=True)
+    st.markdown(get_csv_download_link(merged[display_cols], "inventory_report.csv"), unsafe_allow_html=True)
+    st.markdown(get_excel_download_link(merged[display_cols], "inventory_report.xlsx"), unsafe_allow_html=True)
+    if st.button("📥 Download PDF Report"):
+        pdf_bytes = generate_professional_pdf(
+            title="Inventory Report",
+            data=merged[display_cols].values.tolist(),
+            headers=display_cols,
+            filename="inventory_report.pdf",
+            landscape=True,
+            logo_url=get_logo_url(),
+            company_name=get_settings().get("company_name", "")
+        )
+        st.markdown(get_pdf_download_link(pdf_bytes, "inventory_report.pdf"), unsafe_allow_html=True)
+
+# -------------------- Custom Report Builder --------------------
+def custom_report_builder():
+    st.header("Custom Report Builder")
+    tables = {
+        "Sales": supabase.table("sales").select("*").execute().data,
+        "Purchases": supabase.table("purchases").select("*").execute().data,
+        "Production": supabase.table("production").select("*").execute().data,
+        "Wastage": supabase.table("wastage").select("*").execute().data,
+        "Feedback": supabase.table("feedback").select("*").execute().data,
+        "Employees": supabase.table("employees").select("*").execute().data,
+        "Raw Materials": supabase.table("raw_materials").select("*").execute().data,
+        "Stock": supabase.table("stock").select("*").execute().data,
+        "Monthly Ration": supabase.table("monthly_ration").select("*").execute().data,
+    }
+    selected_table = st.selectbox("Select Table", list(tables.keys()))
+    if selected_table:
+        data = tables[selected_table]
+        if not data:
+            st.info("No data in this table")
+            return
+        df = pd.DataFrame(data)
+        # Column selection
+        all_columns = df.columns.tolist()
+        selected_columns = st.multiselect("Select Columns to Display", all_columns, default=all_columns[:5])
+        if not selected_columns:
+            st.warning("Please select at least one column")
+            return
+        df_display = df[selected_columns]
+        # Filters (simple text filter on first column)
+        filter_col = st.selectbox("Filter by Column (optional)", ["None"] + selected_columns)
+        if filter_col != "None":
+            filter_val = st.text_input(f"Filter value for {filter_col}")
+            if filter_val:
+                df_display = df_display[df_display[filter_col].astype(str).str.contains(filter_val, case=False)]
+        st.dataframe(df_display, use_container_width=True)
+        # Export
+        st.markdown(get_csv_download_link(df_display, f"custom_report.csv"), unsafe_allow_html=True)
+        st.markdown(get_excel_download_link(df_display, f"custom_report.xlsx"), unsafe_allow_html=True)
+        if st.button("📥 Download PDF Report"):
+            pdf_bytes = generate_professional_pdf(
+                title=f"Custom Report - {selected_table}",
+                data=df_display.values.tolist(),
+                headers=df_display.columns.tolist(),
+                filename="custom_report.pdf",
+                landscape=True,
+                logo_url=get_logo_url(),
+                company_name=get_settings().get("company_name", "")
+            )
+            st.markdown(get_pdf_download_link(pdf_bytes, "custom_report.pdf"), unsafe_allow_html=True)
 
 # -------------------- Advanced Reports --------------------
 def reports_page():
@@ -1451,10 +1599,21 @@ def reports_page():
         "Wastage Trend",
         "Profit Margin Trend",
         "Monthly Ration Analysis",
+        "Employee Details",
+        "Inventory Report",
         "Custom Report"
     ])
     if report_type == "Monthly Ration Analysis":
         monthly_ration_analysis()
+        return
+    elif report_type == "Employee Details":
+        employee_details_report()
+        return
+    elif report_type == "Inventory Report":
+        inventory_report()
+        return
+    elif report_type == "Custom Report":
+        custom_report_builder()
         return
     start = st.date_input("Start Date")
     end = st.date_input("End Date")
@@ -1473,8 +1632,18 @@ def reports_page():
                     payment_counts.columns = ["Status","Count"]
                     fig2 = px.pie(payment_counts, values="Count", names="Status", title="Payment Status")
                     st.plotly_chart(fig2, use_container_width=True)
-                    st.markdown(get_csv_download_link(df, "sales_report.csv"), unsafe_allow_html=True)
-                    st.markdown(get_excel_download_link(df, "sales_report.xlsx"), unsafe_allow_html=True)
+                    # PDF
+                    if st.button("📥 Download PDF Report (Sales)"):
+                        pdf_bytes = generate_professional_pdf(
+                            title=f"Sales Report {start} to {end}",
+                            data=df[["date","order_id","emp_id","total","payment_status"]].values.tolist(),
+                            headers=["Date","Order ID","Employee","Total","Status"],
+                            filename="sales_report.pdf",
+                            landscape=True,
+                            logo_url=get_logo_url(),
+                            company_name=get_settings().get("company_name", "")
+                        )
+                        st.markdown(get_pdf_download_link(pdf_bytes, "sales_report.pdf"), unsafe_allow_html=True)
                 else:
                     st.info("No sales data for selected period")
 
@@ -1494,6 +1663,17 @@ def reports_page():
                     st.dataframe(df, use_container_width=True)
                     st.markdown(get_csv_download_link(df, "dish_popularity.csv"), unsafe_allow_html=True)
                     st.markdown(get_excel_download_link(df, "dish_popularity.xlsx"), unsafe_allow_html=True)
+                    if st.button("📥 Download PDF Report"):
+                        pdf_bytes = generate_professional_pdf(
+                            title=f"Dish Popularity {start} to {end}",
+                            data=df.values.tolist(),
+                            headers=["Dish","Quantity Sold"],
+                            filename="dish_popularity.pdf",
+                            landscape=False,
+                            logo_url=get_logo_url(),
+                            company_name=get_settings().get("company_name", "")
+                        )
+                        st.markdown(get_pdf_download_link(pdf_bytes, "dish_popularity.pdf"), unsafe_allow_html=True)
                 else:
                     st.info("No sales data")
 
@@ -1511,6 +1691,17 @@ def reports_page():
                     st.plotly_chart(fig, use_container_width=True)
                     st.dataframe(df, use_container_width=True)
                     st.markdown(get_csv_download_link(df, "employee_meals.csv"), unsafe_allow_html=True)
+                    if st.button("📥 Download PDF Report"):
+                        pdf_bytes = generate_professional_pdf(
+                            title=f"Employee Consumption {start} to {end}",
+                            data=df.values.tolist(),
+                            headers=["Employee","Meals"],
+                            filename="employee_consumption.pdf",
+                            landscape=False,
+                            logo_url=get_logo_url(),
+                            company_name=get_settings().get("company_name", "")
+                        )
+                        st.markdown(get_pdf_download_link(pdf_bytes, "employee_consumption.pdf"), unsafe_allow_html=True)
                 else:
                     st.info("No sales data")
 
@@ -1526,6 +1717,17 @@ def reports_page():
                     st.plotly_chart(fig2, use_container_width=True)
                     st.dataframe(df, use_container_width=True)
                     st.markdown(get_csv_download_link(df, "wastage_report.csv"), unsafe_allow_html=True)
+                    if st.button("📥 Download PDF Report"):
+                        pdf_bytes = generate_professional_pdf(
+                            title=f"Wastage Report {start} to {end}",
+                            data=df[["date","item","quantity","unit","reason"]].values.tolist(),
+                            headers=["Date","Item","Quantity","Unit","Reason"],
+                            filename="wastage_report.pdf",
+                            landscape=True,
+                            logo_url=get_logo_url(),
+                            company_name=get_settings().get("company_name", "")
+                        )
+                        st.markdown(get_pdf_download_link(pdf_bytes, "wastage_report.pdf"), unsafe_allow_html=True)
                 else:
                     st.info("No wastage data")
 
@@ -1546,11 +1748,19 @@ def reports_page():
                     st.plotly_chart(fig2, use_container_width=True)
                     st.dataframe(merged, use_container_width=True)
                     st.markdown(get_csv_download_link(merged, "profit_margin.csv"), unsafe_allow_html=True)
+                    if st.button("📥 Download PDF Report"):
+                        pdf_bytes = generate_professional_pdf(
+                            title=f"Profit Margin Report {start} to {end}",
+                            data=merged.values.tolist(),
+                            headers=["Date","Revenue","Cost","Profit","Margin %"],
+                            filename="profit_margin.pdf",
+                            landscape=True,
+                            logo_url=get_logo_url(),
+                            company_name=get_settings().get("company_name", "")
+                        )
+                        st.markdown(get_pdf_download_link(pdf_bytes, "profit_margin.pdf"), unsafe_allow_html=True)
                 else:
                     st.info("Insufficient data")
-
-            elif report_type == "Custom Report":
-                st.info("Custom report builder coming soon!")
 
 # -------------------- Settings --------------------
 def settings_page():
