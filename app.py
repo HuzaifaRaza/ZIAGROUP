@@ -18,7 +18,7 @@ st.set_page_config(
     menu_items={
         'Get Help': None,
         'Report a bug': None,
-        'About': 'Catering Management System v3.0'
+        'About': 'Catering Management System v4.0'
     }
 )
 
@@ -654,7 +654,7 @@ def show_dashboard():
             level = reorder[0]["reorder_level"] if reorder else 0
             st.warning(f"{item['item']} only {item['quantity']} {item['unit']} left (Reorder level: {level})")
 
-# -------------------- CRUD Helpers (Improved) --------------------
+# -------------------- CRUD Helper (Presentable Data) --------------------
 def render_crud_table(table_name, columns, display_columns, form_fields, fetch_func, insert_func, update_func, delete_func, key_field="id"):
     st.subheader(table_name.replace("_", " ").title())
     if st.button(f"➕ Add {table_name[:-1].title()}"):
@@ -696,10 +696,20 @@ def render_crud_table(table_name, columns, display_columns, form_fields, fetch_f
     end = start + page_size
     df_page = df.iloc[start:end]
 
-    # Display with expanders for each record
+    # Display the main table
+    st.dataframe(df_page[display_columns], use_container_width=True)
+
+    # Display expanders for each record with clean formatting
     for idx, row in df_page.iterrows():
-        with st.expander(f"Record {idx+1} (ID: {row[key_field]})"):
-            st.write(row.to_dict())
+        with st.expander(f"Details for Record {idx+1} (ID: {row[key_field]})"):
+            # Show fields in a two-column layout
+            cols = st.columns(2)
+            field_index = 0
+            for col_name in display_columns:
+                with cols[field_index % 2]:
+                    st.markdown(f"**{col_name}:** {row[col_name]}")
+                field_index += 1
+            # Add Edit/Delete buttons
             col1, col2 = st.columns(2)
             with col1:
                 if st.button(f"✏️ Edit", key=f"edit_{table_name}_{row[key_field]}"):
@@ -715,7 +725,6 @@ def render_crud_table(table_name, columns, display_columns, form_fields, fetch_f
                     else:
                         st.error("Delete failed")
 
-    st.dataframe(df_page[display_columns], use_container_width=True)
     st.markdown(get_csv_download_link(df[display_columns], f"{table_name}.csv"), unsafe_allow_html=True)
     st.markdown(get_excel_download_link(df[display_columns], f"{table_name}.xlsx"), unsafe_allow_html=True)
 
@@ -901,13 +910,13 @@ def recipes_management():
         for _, row in df.iterrows():
             with st.expander(f"{row['dish_name']} - Rs {row['selling_price']}"):
                 st.write(f"**Cost per plate:** Rs {row['cost_per_plate']:.2f}")
-                st.write("Ingredients:")
+                st.write("**Ingredients:**")
                 for ing in json.loads(row['ingredients']):
                     st.write(f"- {ing['item']}: {ing['qty']}{ing['unit']}")
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("✏️ Edit", key=f"edit_recipe_{row['id']}"):
-                        st.info("Edit coming soon")
+                        st.info("Edit coming soon")  # Edit not implemented for simplicity
                 with col2:
                     if st.button("🗑️ Delete", key=f"delete_recipe_{row['id']}"):
                         supabase.table("recipes").delete().eq("id", row['id']).execute()
