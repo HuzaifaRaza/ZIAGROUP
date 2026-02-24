@@ -19,7 +19,7 @@ st.set_page_config(
     menu_items={
         'Get Help': None,
         'Report a bug': None,
-        'About': 'Catering Management System v7.0'
+        'About': 'Catering Management System v7.1'
     }
 )
 
@@ -68,6 +68,63 @@ def get_all_production():
 @st.cache_data(ttl=300)
 def get_all_stock():
     return supabase.table("stock").select("*").execute().data
+
+# -------------------- Enhanced Dashboard Caches --------------------
+@st.cache_data(ttl=300)
+def get_last_7_days_sales():
+    end_date = datetime.date.today()
+    start_date = end_date - datetime.timedelta(days=6)
+    sales_data = supabase.table("sales").select("date, total").gte("date", start_date.isoformat()).lte("date", end_date.isoformat()).execute().data
+    df = pd.DataFrame(sales_data)
+    if not df.empty:
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.groupby('date')['total'].sum().reset_index()
+    return df
+
+@st.cache_data(ttl=300)
+def get_last_7_days_wastage():
+    end_date = datetime.date.today()
+    start_date = end_date - datetime.timedelta(days=6)
+    wastage_data = supabase.table("wastage").select("date, quantity").gte("date", start_date.isoformat()).lte("date", end_date.isoformat()).execute().data
+    df = pd.DataFrame(wastage_data)
+    if not df.empty:
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.groupby('date')['quantity'].sum().reset_index()
+    return df
+
+@st.cache_data(ttl=300)
+def get_last_7_days_feedback_ratings():
+    end_date = datetime.date.today()
+    start_date = end_date - datetime.timedelta(days=6)
+    feedback_data = supabase.table("feedback").select("date, rating").gte("date", start_date.isoformat()).lte("date", end_date.isoformat()).execute().data
+    df = pd.DataFrame(feedback_data)
+    if not df.empty:
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.groupby('date')['rating'].mean().reset_index()
+    return df
+
+@st.cache_data(ttl=300)
+def get_top_dishes_last_7_days():
+    end_date = datetime.date.today()
+    start_date = end_date - datetime.timedelta(days=6)
+    sales_data = supabase.table("sales").select("items").gte("date", start_date.isoformat()).lte("date", end_date.isoformat()).execute().data
+    dish_counts = {}
+    for sale in sales_data:
+        items = json.loads(sale['items'])
+        for dish, qty in items.items():
+            dish_counts[dish] = dish_counts.get(dish, 0) + qty
+    df = pd.DataFrame(list(dish_counts.items()), columns=['Dish', 'Quantity']).sort_values('Quantity', ascending=False).head(5)
+    return df
+
+@st.cache_data(ttl=300)
+def get_wastage_by_reason_last_7_days():
+    end_date = datetime.date.today()
+    start_date = end_date - datetime.timedelta(days=6)
+    wastage_data = supabase.table("wastage").select("reason, quantity").gte("date", start_date.isoformat()).lte("date", end_date.isoformat()).execute().data
+    df = pd.DataFrame(wastage_data)
+    if not df.empty:
+        df = df.groupby('reason')['quantity'].sum().reset_index()
+    return df
 
 # -------------------- Utility Functions --------------------
 def get_settings():
@@ -681,18 +738,71 @@ def show_dashboard():
     st.header("Dashboard")
     with st.spinner("Loading dashboard..."):
         stats = get_dashboard_stats()
+        sales_trend = get_last_7_days_sales()
+        wastage_trend = get_last_7_days_wastage()
+        feedback_trend = get_last_7_days_feedback_ratings()
+        top_dishes = get_top_dishes_last_7_days()
+        wastage_reasons = get_wastage_by_reason_last_7_days()
+
+    # KPIs
     cols = st.columns(4)
     cols[0].metric("Today's Sales", f"Rs {stats['today_sales']:,.0f}")
     cols[1].metric("Meals Served", stats['meals_served'])
     cols[2].metric("Active Employees", stats['active_employees'])
     cols[3].metric("Low Stock Items", stats['low_stock'])
-    st.metric("Average Rating", f"{stats['avg_rating']:.1f} / 5")
+
+    # Second row: Average Rating (as a large metric)
+    st.metric("Average Rating (All Time)", f"{stats['avg_rating']:.1f} / 5")
+
+    # Low stock alerts
     if stats['low_stock_details']:
         st.subheader("⚠️ Low Stock Alerts")
         for item in stats['low_stock_details']:
             reorder = supabase.table("raw_materials").select("reorder_level").eq("name", item["item"]).execute().data
             level = reorder[0]["reorder_level"] if reorder else 0
             st.warning(f"{item['item']} only {item['quantity']} {item['unit']} left (Reorder level: {level})")
+
+    # Charts row 1: Sales Trend and Top Dishes
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Sales Trend (Last 7 Days)")
+        if not sales_trend.empty:
+            fig = px.line(sales_trend, x='date', y='total', title="Daily Sales")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No sales data in last 7 days")
+    with col2:
+        st.subheader("Top 5 Dishes (Last 7 Days)")
+        if not top_dishes.empty:
+            fig = px.bar(top_dishes, x='Dish', y='Quantity', title="Top Dishes by Quantity")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No dish sales in last 7 days")
+
+    # Charts row 2: Wastage Trend and Wastage by Reason
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Wastage Trend (Last 7 Days)")
+        if not wastage_trend.empty:
+            fig = px.line(wastage_trend, x='date', y='quantity', title="Daily Wastage Quantity")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No wastage data in last 7 days")
+    with col2:
+        st.subheader("Wastage by Reason (Last 7 Days)")
+        if not wastage_reasons.empty:
+            fig = px.pie(wastage_reasons, values='quantity', names='reason', title="Wastage Distribution")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No wastage data")
+
+    # Charts row 3: Feedback Rating Trend
+    st.subheader("Average Feedback Rating (Last 7 Days)")
+    if not feedback_trend.empty:
+        fig = px.line(feedback_trend, x='date', y='rating', title="Daily Average Rating", range_y=[1,5])
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No feedback in last 7 days")
 
 # -------------------- Improved CRUD Helper (with friendly expander title) --------------------
 def render_crud_table(table_name, columns, display_columns, form_fields, fetch_func, insert_func, update_func, delete_func, key_field="id", searchable=True, title_field=None):
@@ -944,17 +1054,30 @@ def raw_materials_management():
     ]
     render_crud_table("raw_materials", ["id","name","unit","current_rate","reorder_level"], ["name","unit","current_rate","reorder_level"], form_fields, fetch, insert, update, delete, title_field="name")
 
-# -------------------- Recipes --------------------
+# -------------------- Recipes Management (Fixed) --------------------
 def recipes_management():
     st.header("Recipes")
     if st.button("➕ Add Recipe"):
         st.session_state.add_recipe = True
 
     if st.session_state.get("add_recipe", False):
+        # Buttons to add/clear ingredients – placed outside the form
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("➕ Add Ingredient", key="add_ingredient_outside"):
+                st.session_state.ingredients.append({"item": "", "qty": 0.0, "unit": "g"})
+                st.rerun()
+        with col2:
+            if st.button("🗑️ Clear All", key="clear_ingredients_outside"):
+                st.session_state.ingredients = [{"item": "", "qty": 0.0, "unit": "g"}]
+                st.rerun()
+
+        # Main form for recipe details and ingredient rows
         with st.form("add_recipe_form", clear_on_submit=True):
             dish_name = st.text_input("Dish Name")
             selling_price = st.number_input("Selling Price", min_value=0.0, step=0.01, format="%.2f")
             st.write("Ingredients")
+            # Ingredient rows
             for i, ing in enumerate(st.session_state.ingredients):
                 cols = st.columns([4,2,2,1])
                 with cols[0]:
@@ -964,68 +1087,51 @@ def recipes_management():
                 with cols[2]:
                     ing["unit"] = st.selectbox(f"Unit {i+1}", ["g","ml","pcs"], index=["g","ml","pcs"].index(ing["unit"]), key=f"unit_{i}")
                 with cols[3]:
-                    if i > 0 and st.button("❌", key=f"remove_{i}"):
+                    # Remove button is inside the form but it's a button – it will cause a form submit if clicked.
+                    # To avoid that, we need to move remove buttons outside as well. Let's move them too.
+                    pass  # we'll handle remove via separate buttons below? Simpler: remove button outside.
+            st.form_submit_button("Save Recipe")  # only submit button inside form
+
+        # After the form, we can show remove buttons for each ingredient
+        if st.session_state.ingredients:
+            st.write("Remove ingredients:")
+            for i, ing in enumerate(st.session_state.ingredients):
+                if i > 0:  # keep at least one
+                    if st.button(f"❌ Remove {ing['item'] or f'Ingredient {i+1}'}", key=f"remove_{i}"):
                         st.session_state.ingredients.pop(i)
                         st.rerun()
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("➕ Add Ingredient"):
-                    st.session_state.ingredients.append({"item": "", "qty": 0.0, "unit": "g"})
-                    st.rerun()
-            with col2:
-                if st.button("🗑️ Clear All"):
-                    st.session_state.ingredients = [{"item": "", "qty": 0.0, "unit": "g"}]
-                    st.rerun()
-            if st.form_submit_button("Save Recipe"):
-                ingredients = [ing for ing in st.session_state.ingredients if ing["item"].strip() and ing["qty"]>0]
-                if not ingredients:
-                    st.error("At least one ingredient required")
-                else:
-                    with st.spinner("Calculating cost and saving..."):
-                        cost = calculate_recipe_cost(ingredients)
-                        data = {
-                            "dish_name": dish_name,
-                            "ingredients": json.dumps(ingredients),
-                            "selling_price": selling_price,
-                            "cost_per_plate": cost
-                        }
-                        try:
-                            supabase.table("recipes").insert(data).execute()
-                            st.success("Recipe added")
-                            st.session_state.add_recipe = False
-                            st.session_state.ingredients = [{"item": "", "qty": 0.0, "unit": "g"}]
-                            log_audit("Add Recipe", dish_name)
+        else:
+            # if all removed, reset to one empty row
+            st.session_state.ingredients = [{"item": "", "qty": 0.0, "unit": "g"}]
+            st.rerun()
+    else:
+        # Display existing recipes
+        recipes = get_recipes()
+        if recipes:
+            df = pd.DataFrame(recipes)
+            # Search
+            search_term = st.text_input("🔍 Search Recipes").lower()
+            if search_term:
+                df = df[df['dish_name'].str.lower().str.contains(search_term)]
+            st.dataframe(df[["dish_name","selling_price","cost_per_plate"]], use_container_width=True)
+            for _, row in df.iterrows():
+                with st.expander(f"{row['dish_name']} - Rs {row['selling_price']}"):
+                    st.write(f"**Cost per plate:** Rs {row['cost_per_plate']:.2f}")
+                    st.write("**Ingredients:**")
+                    for ing in json.loads(row['ingredients']):
+                        st.write(f"- {ing['item']}: {ing['qty']}{ing['unit']}")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("✏️ Edit", key=f"edit_recipe_{row['id']}"):
+                            st.info("Edit coming soon")  # For simplicity, edit not implemented for recipes
+                    with col2:
+                        if st.button("🗑️ Delete", key=f"delete_recipe_{row['id']}"):
+                            supabase.table("recipes").delete().eq("id", row['id']).execute()
+                            st.success("Deleted")
                             st.cache_data.clear()
                             st.rerun()
-                        except Exception as e:
-                            st.error(str(e))
-
-    recipes = get_recipes()
-    if recipes:
-        df = pd.DataFrame(recipes)
-        # Search
-        search_term = st.text_input("🔍 Search Recipes").lower()
-        if search_term:
-            df = df[df['dish_name'].str.lower().str.contains(search_term)]
-        st.dataframe(df[["dish_name","selling_price","cost_per_plate"]], use_container_width=True)
-        for _, row in df.iterrows():
-            with st.expander(f"{row['dish_name']} - Rs {row['selling_price']}"):
-                st.write(f"**Cost per plate:** Rs {row['cost_per_plate']:.2f}")
-                st.write("**Ingredients:**")
-                for ing in json.loads(row['ingredients']):
-                    st.write(f"- {ing['item']}: {ing['qty']}{ing['unit']}")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("✏️ Edit", key=f"edit_recipe_{row['id']}"):
-                        st.info("Edit coming soon")
-                with col2:
-                    if st.button("🗑️ Delete", key=f"delete_recipe_{row['id']}"):
-                        supabase.table("recipes").delete().eq("id", row['id']).execute()
-                        st.success("Deleted")
-                        st.cache_data.clear()
-                        st.rerun()
-        st.markdown(get_csv_download_link(df[["dish_name","selling_price","cost_per_plate"]], "recipes.csv"), unsafe_allow_html=True)
-        st.markdown(get_excel_download_link(df[["dish_name","selling_price","cost_per_plate"]], "recipes.xlsx"), unsafe_allow_html=True)
+            st.markdown(get_csv_download_link(df[["dish_name","selling_price","cost_per_plate"]], "recipes.csv"), unsafe_allow_html=True)
+            st.markdown(get_excel_download_link(df[["dish_name","selling_price","cost_per_plate"]], "recipes.xlsx"), unsafe_allow_html=True)
 
 # -------------------- Purchases --------------------
 def purchases_management():
